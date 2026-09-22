@@ -1,138 +1,128 @@
 /**
- * 赤とんぼクロスカントリー 評価ロジック（純粋関数のみ）
+ * 赤とんぼカントリークラブ スコア評価ロジック（純粋関数のみ）
  * DOM に触らないので、そのまま node --test で検証できます。
  */
 
 import {
-  BASE_DISTANCE_KM,
+  COURSE,
   FIELD_DISTRIBUTION,
   GRADES,
-  RIEGEL_EXPONENT,
+  HOLES,
+  HOLE_RESULTS,
+  MAX_STROKES_PER_HOLE,
   SCORE_ANCHORS,
-  findCondition,
-  findDivision,
-} from './criteria.js';
+  findTee,
+} from './course.js';
 
 /* ------------------------------------------------------------------ */
-/* タイムの読み書き                                                     */
+/* 入力の読み取り                                                       */
 /* ------------------------------------------------------------------ */
 
-/**
- * タイム文字列を秒に変換する。
- * "12:34" / "1:02:03" / "12'34" / "12分34秒" / "754"（秒）を受け付ける。
- * 解釈できなければ null。
- */
-export function parseTime(input) {
+/** スコア文字列を打数に直す。整数でなければ null。 */
+export function parseStrokes(input) {
   if (typeof input === 'number') {
-    return Number.isFinite(input) && input > 0 ? input : null;
+    return Number.isInteger(input) && input > 0 ? input : null;
   }
   if (typeof input !== 'string') return null;
-
-  const normalized = input
-    .trim()
-    .replace(/[０-９]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xfee0))
-    .replace(/[時間分'′’]/g, ':')
-    .replace(/[秒"″”]/g, '')
-    .replace(/[.]/g, ':')
-    .replace(/\s+/g, '');
-
-  if (normalized === '') return null;
-
-  const parts = normalized.split(':').filter((p, i, arr) => !(p === '' && i === arr.length - 1));
-  if (parts.length === 0 || parts.length > 3) return null;
-  if (parts.some((p) => !/^\d+$/.test(p))) return null;
-
-  const nums = parts.map(Number);
-  let seconds;
-  if (nums.length === 1) {
-    seconds = nums[0];
-  } else if (nums.length === 2) {
-    if (nums[1] >= 60) return null;
-    seconds = nums[0] * 60 + nums[1];
-  } else {
-    if (nums[1] >= 60 || nums[2] >= 60) return null;
-    seconds = nums[0] * 3600 + nums[1] * 60 + nums[2];
-  }
-  return seconds > 0 ? seconds : null;
+  const normalized = input.trim().replace(/[０-９]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xfee0));
+  if (!/^\d+$/.test(normalized)) return null;
+  const value = Number(normalized);
+  return value > 0 ? value : null;
 }
 
-/** 秒を "m:ss" / "h:mm:ss" に整形する。 */
-export function formatTime(seconds) {
-  const total = Math.max(0, Math.round(seconds));
-  const h = Math.floor(total / 3600);
-  const m = Math.floor((total % 3600) / 60);
-  const s = total % 60;
-  const pad = (n) => String(n).padStart(2, '0');
-  return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
-}
-
-/** 秒/km を "m'ss\"/km" に整形する。 */
-export function formatPace(secondsPerKm) {
-  const total = Math.max(0, Math.round(secondsPerKm));
-  const m = Math.floor(total / 60);
-  const s = total % 60;
-  return `${m}'${String(s).padStart(2, '0')}"/km`;
+/** パーとの差を "+28" / "±0" / "-2" の形にする。 */
+export function formatDiff(diff) {
+  if (diff === 0) return '±0';
+  return diff > 0 ? `+${diff}` : `−${Math.abs(diff)}`;
 }
 
 /* ------------------------------------------------------------------ */
-/* 走力モデル                                                          */
+/* 採点                                                                */
 /* ------------------------------------------------------------------ */
 
-/** Riegel 式で距離換算する。 */
-export function equivalentTime(seconds, fromKm, toKm) {
-  if (!(seconds > 0) || !(fromKm > 0) || !(toKm > 0)) return NaN;
-  return seconds * Math.pow(toKm / fromKm, RIEGEL_EXPONENT);
-}
-
-/** その部門・距離・コース状況における基準タイム（＝60点 / 評価C）。 */
-export function standardTime(division, distanceKm, courseFactor = 1) {
-  if (!division || !(distanceKm > 0)) return NaN;
-  return equivalentTime(division.base3k, BASE_DISTANCE_KM, distanceKm) * courseFactor;
-}
-
-/** ratio（実タイム ÷ 基準タイム）を 0〜100 点に写す。 */
-export function scoreFromRatio(ratio) {
-  if (!(ratio > 0)) return NaN;
+/** パーとの差を 0〜100 点に写す。 */
+export function pointsFromDiff(diff) {
   const anchors = SCORE_ANCHORS;
-  if (ratio <= anchors[0].ratio) return 100;
+  if (diff <= anchors[0].diff) return 100;
   const last = anchors[anchors.length - 1];
-  if (ratio >= last.ratio) return 0;
+  if (diff >= last.diff) return 0;
 
   for (let i = 0; i < anchors.length - 1; i += 1) {
     const a = anchors[i];
     const b = anchors[i + 1];
-    if (ratio >= a.ratio && ratio <= b.ratio) {
-      const t = (ratio - a.ratio) / (b.ratio - a.ratio);
-      return a.score + t * (b.score - a.score);
+    if (diff >= a.diff && diff <= b.diff) {
+      const t = (diff - a.diff) / (b.diff - a.diff);
+      return a.points + t * (b.points - a.points);
     }
   }
   return 0;
 }
 
-/** scoreFromRatio の逆関数。その得点をとるのに必要な ratio を返す。 */
-export function ratioForScore(score) {
-  const clamped = Math.min(100, Math.max(0, score));
+/** pointsFromDiff の逆関数。その点数に必要なパーとの差を返す。 */
+export function diffForPoints(points) {
+  const clamped = Math.min(100, Math.max(0, points));
   const anchors = SCORE_ANCHORS;
   for (let i = 0; i < anchors.length - 1; i += 1) {
     const a = anchors[i];
     const b = anchors[i + 1];
-    if (clamped <= a.score && clamped >= b.score) {
-      if (a.score === b.score) return a.ratio;
-      const t = (a.score - clamped) / (a.score - b.score);
-      return a.ratio + t * (b.ratio - a.ratio);
+    if (clamped <= a.points && clamped >= b.points) {
+      if (a.points === b.points) return a.diff;
+      const t = (a.points - clamped) / (a.points - b.points);
+      return a.diff + t * (b.diff - a.diff);
     }
   }
-  return anchors[anchors.length - 1].ratio;
+  return anchors[anchors.length - 1].diff;
 }
 
-/** その得点に必要なタイム（秒）。 */
-export function timeForScore(score, standardSeconds) {
-  return ratioForScore(score) * standardSeconds;
+/** 点数から評価ランクを引く。 */
+export function gradeFor(points) {
+  return GRADES.find((g) => points >= g.min) ?? GRADES[GRADES.length - 1];
 }
 
-/** 得点から評価ランクを引く。 */
-export function gradeFor(score) {
-  return GRADES.find((g) => score >= g.min) ?? GRADES[GRADES.length - 1];
+/* ------------------------------------------------------------------ */
+/* ハンディキャップ                                                     */
+/* ------------------------------------------------------------------ */
+
+/**
+ * 1ラウンドのスコアディファレンシャル。
+ * (113 / スロープレート) × (スコア − コースレート)
+ */
+export function scoreDifferential(strokes, tee) {
+  if (!tee || !(strokes > 0)) return NaN;
+  return (113 / tee.slope) * (strokes - tee.courseRating);
+}
+
+/**
+ * 提出ラウンド数に応じて、ディファレンシャルの何本を使い、
+ * いくつ調整するか（ワールドハンディキャップシステムの少数ラウンド表）。
+ */
+export function handicapAllowance(roundCount) {
+  if (roundCount < 3) return null;
+  if (roundCount === 3) return { use: 1, adjustment: -2 };
+  if (roundCount === 4) return { use: 1, adjustment: -1 };
+  if (roundCount === 5) return { use: 1, adjustment: 0 };
+  if (roundCount === 6) return { use: 2, adjustment: -1 };
+  if (roundCount <= 8) return { use: 2, adjustment: 0 };
+  if (roundCount <= 11) return { use: 3, adjustment: 0 };
+  if (roundCount <= 14) return { use: 4, adjustment: 0 };
+  if (roundCount <= 16) return { use: 5, adjustment: 0 };
+  if (roundCount <= 18) return { use: 6, adjustment: 0 };
+  if (roundCount === 19) return { use: 7, adjustment: 0 };
+  return { use: 8, adjustment: 0 };
+}
+
+/**
+ * 直近20ラウンドのディファレンシャルからハンディキャップ指数を出す。
+ * 3ラウンド未満なら null。
+ */
+export function handicapIndex(differentials) {
+  const values = differentials.filter((d) => Number.isFinite(d)).slice(0, 20);
+  const allowance = handicapAllowance(values.length);
+  if (!allowance) return null;
+
+  const best = [...values].sort((a, b) => a - b).slice(0, allowance.use);
+  const average = best.reduce((sum, d) => sum + d, 0) / best.length;
+  return Math.round((average + allowance.adjustment) * 10) / 10;
 }
 
 /* ------------------------------------------------------------------ */
@@ -153,160 +143,234 @@ export function normalCdf(z) {
   return 0.5 * (1 + sign * y);
 }
 
-/**
- * 同部門で自分より速い人の割合（％）＝「推定上位 N%」。
- * 小さいほど速い。1〜99 に丸める。
- */
-export function estimatedTopPercent(seconds, standardSeconds) {
-  if (!(seconds > 0) || !(standardSeconds > 0)) return NaN;
-  const { medianFactor, sigma } = FIELD_DISTRIBUTION;
-  const z = (Math.log(seconds) - Math.log(standardSeconds * medianFactor)) / sigma;
-  const pct = normalCdf(z) * 100;
+/** 同じコースを回るアマチュアのうち、自分より良いスコアの割合（％）。 */
+export function estimatedTopPercent(diff) {
+  if (!Number.isFinite(diff)) return NaN;
+  const { meanOverPar, sd } = FIELD_DISTRIBUTION;
+  const pct = normalCdf((diff - meanOverPar) / sd) * 100;
   return Math.min(99, Math.max(1, pct));
 }
 
-/** 実際の順位から上位何％かを出す。 */
-export function actualTopPercent(place, finishers) {
-  if (!(place > 0) || !(finishers > 0) || place > finishers) return null;
-  return ((place - 0.5) / finishers) * 100;
+/* ------------------------------------------------------------------ */
+/* ホール別の集計                                                       */
+/* ------------------------------------------------------------------ */
+
+/** ホールのスコアの呼び名（バーディ／ボギー…）を引く。 */
+export function holeResultKey(strokes, par) {
+  const diff = strokes - par;
+  return HOLE_RESULTS.find((r) => diff <= r.max).key;
+}
+
+/**
+ * 18ホール分の打数から内訳を集計する。
+ * strokes は長さ18の配列。未入力は null。
+ */
+export function summarizeHoles(strokes) {
+  const filled = [];
+  for (let i = 0; i < HOLES.length; i += 1) {
+    const value = strokes[i];
+    if (Number.isFinite(value) && value > 0) filled.push({ hole: HOLES[i], strokes: value });
+  }
+  if (filled.length === 0) return null;
+
+  const counts = Object.fromEntries(HOLE_RESULTS.map((r) => [r.key, 0]));
+  for (const { hole, strokes: s } of filled) counts[holeResultKey(s, hole.par)] += 1;
+
+  const sideTotal = (side) =>
+    filled
+      .filter(({ hole }) => hole.side === side)
+      .reduce((acc, { strokes: s, hole }) => ({ strokes: acc.strokes + s, par: acc.par + hole.par }), {
+        strokes: 0,
+        par: 0,
+      });
+
+  const byPar = [3, 4, 5].map((par) => {
+    const group = filled.filter(({ hole }) => hole.par === par);
+    return {
+      par,
+      holes: group.length,
+      average: group.length ? group.reduce((sum, { strokes: s }) => sum + s, 0) / group.length : null,
+      overPar: group.length
+        ? group.reduce((sum, { strokes: s, hole }) => sum + (s - hole.par), 0) / group.length
+        : null,
+    };
+  });
+
+  const ranked = [...filled].sort(
+    (a, b) => b.strokes - b.hole.par - (a.strokes - a.hole.par),
+  );
+
+  return {
+    holesEntered: filled.length,
+    strokes: filled.reduce((sum, { strokes: s }) => sum + s, 0),
+    par: filled.reduce((sum, { hole }) => sum + hole.par, 0),
+    counts,
+    out: sideTotal('OUT'),
+    in: sideTotal('IN'),
+    byPar,
+    worst: ranked[0] ?? null,
+    best: ranked[ranked.length - 1] ?? null,
+  };
 }
 
 /* ------------------------------------------------------------------ */
 /* 総合評価                                                            */
 /* ------------------------------------------------------------------ */
 
-const OTHER_DISTANCES = [1, 1.5, 2, 3, 5, 10];
-
 /**
- * 入力一式を評価する。
- * @param {{divisionId:string, distanceKm:number, timeInput:string|number,
- *          conditionId?:string, place?:number|null, finishers?:number|null}} input
- * @returns {{ok:true, ...}|{ok:false, error:string}}
+ * 1ラウンドを評価する。
+ * @param {{teeId:string, strokes?:number|string, holeStrokes?:Array<number|null>,
+ *          putts?:number|null, fairways?:number|null, greens?:number|null,
+ *          pastDifferentials?:number[]}} input
  */
 export function evaluate(input) {
-  const division = findDivision(input.divisionId);
-  if (!division) return { ok: false, error: '部門を選んでください。' };
+  const tee = findTee(input.teeId);
+  if (!tee) return { ok: false, error: 'ティーを選んでください。' };
 
-  const distanceKm = Number(input.distanceKm);
-  if (!(distanceKm > 0) || distanceKm > 100) {
-    return { ok: false, error: '距離は 0 より大きい数値（km）で入力してください。' };
+  const holeStrokes = Array.isArray(input.holeStrokes) ? input.holeStrokes : [];
+  const holeSummary = summarizeHoles(holeStrokes);
+  const allHolesEntered = holeSummary?.holesEntered === HOLES.length;
+
+  const strokes = allHolesEntered ? holeSummary.strokes : parseStrokes(input.strokes);
+  if (strokes === null) {
+    return {
+      ok: false,
+      error: 'スコアを入力してください。合計だけでも、18ホール分でも評価できます。',
+    };
+  }
+  if (strokes < COURSE.holeCount) {
+    return { ok: false, error: `18ホールの合計スコアなので ${COURSE.holeCount} 打以上になります。` };
+  }
+  if (strokes > COURSE.holeCount * MAX_STROKES_PER_HOLE) {
+    return { ok: false, error: 'スコアが大きすぎます。入力を見直してください。' };
   }
 
-  const seconds = parseTime(input.timeInput);
-  if (seconds === null) {
-    return { ok: false, error: 'タイムは 12:34 のように「分:秒」で入力してください。' };
-  }
+  const par = COURSE.par;
+  const diff = strokes - par;
+  const points = Math.round(pointsFromDiff(diff) * 10) / 10;
+  const grade = gradeFor(points);
+  const differential = scoreDifferential(strokes, tee);
 
-  const condition = findCondition(input.conditionId ?? '') ?? { id: 'standard', factor: 1, label: '標準' };
-  const standardSeconds = standardTime(division, distanceKm, condition.factor);
-  const ratio = seconds / standardSeconds;
-  const score = Math.round(scoreFromRatio(ratio) * 10) / 10;
-  const grade = gradeFor(score);
-  const paceSecPerKm = seconds / distanceKm;
+  const putts = Number.isFinite(Number(input.putts)) && Number(input.putts) > 0 ? Math.floor(Number(input.putts)) : null;
+  const greens = Number(input.greens) >= 0 && input.greens !== null && input.greens !== '' ? Math.floor(Number(input.greens)) : null;
+  const fairways = Number(input.fairways) >= 0 && input.fairways !== null && input.fairways !== '' ? Math.floor(Number(input.fairways)) : null;
 
-  const place = Number(input.place) > 0 ? Math.floor(Number(input.place)) : null;
-  const finishers = Number(input.finishers) > 0 ? Math.floor(Number(input.finishers)) : null;
-  const placePercent = place && finishers ? actualTopPercent(place, finishers) : null;
+  // 次の目標：1ランク上か +6点の、手が届く方。
+  const nextGrade = [...GRADES].reverse().find((g) => g.min > points) ?? null;
+  const targetPoints = Math.min(100, nextGrade ? Math.min(nextGrade.min, points + 6) : points + 3);
+  const targetStrokes = Math.max(par - 3, Math.ceil(par + diffForPoints(targetPoints)));
 
-  // 次の目標：今より 1 ランク上（または +8点）の低い方＝手が届く方。
-  const nextGrade = [...GRADES].reverse().find((g) => g.min > score) ?? null;
-  const targetScore = Math.min(100, nextGrade ? Math.min(nextGrade.min, score + 8) : score + 4);
-  const targetSeconds = timeForScore(targetScore, standardSeconds);
+  const pastDifferentials = Array.isArray(input.pastDifferentials) ? input.pastDifferentials : [];
 
   return {
     ok: true,
-    division,
-    condition,
-    distanceKm,
-    seconds,
-    standardSeconds,
-    ratio,
-    score,
+    tee,
+    par,
+    strokes,
+    diff,
+    points,
     grade,
-    paceSecPerKm,
-    standardPaceSecPerKm: standardSeconds / distanceKm,
-    estimatedTopPercent: estimatedTopPercent(seconds, standardSeconds),
-    place,
-    finishers,
-    placePercent,
+    differential,
+    handicapIndex: handicapIndex([differential, ...pastDifferentials]),
+    roundsUsed: Math.min(20, pastDifferentials.length + 1),
+    estimatedTopPercent: estimatedTopPercent(diff),
+    putts,
+    puttsPerHole: putts !== null ? putts / COURSE.holeCount : null,
+    shotsWithoutPutts: putts !== null ? strokes - putts : null,
+    greens,
+    greenRate: greens !== null ? (greens / COURSE.holeCount) * 100 : null,
+    fairways,
+    holeSummary,
+    allHolesEntered,
     target: {
-      score: Math.round(targetScore * 10) / 10,
-      grade: gradeFor(targetScore),
-      seconds: targetSeconds,
-      gainSeconds: Math.max(0, seconds - targetSeconds),
-      paceSecPerKm: targetSeconds / distanceKm,
+      points: Math.round(targetPoints * 10) / 10,
+      grade: gradeFor(targetPoints),
+      strokes: targetStrokes,
+      gain: Math.max(0, strokes - targetStrokes),
     },
-    equivalents: OTHER_DISTANCES.filter((km) => Math.abs(km - distanceKm) > 0.01).map((km) => ({
-      km,
-      seconds: equivalentTime(seconds, distanceKm, km),
-      paceSecPerKm: equivalentTime(seconds, distanceKm, km) / km,
-    })),
-    notes: buildNotes({
-      score,
-      grade,
-      ratio,
-      seconds,
-      standardSeconds,
-      placePercent,
-      estimatedPercent: estimatedTopPercent(seconds, standardSeconds),
-      condition,
-    }),
+    notes: buildNotes({ strokes, diff, grade, points, putts, greens, holeSummary, tee }),
   };
 }
 
 /** 評価コメントを組み立てる。 */
-export function buildNotes({
-  score,
-  grade,
-  ratio,
-  seconds,
-  standardSeconds,
-  placePercent,
-  estimatedPercent,
-  condition,
-}) {
+export function buildNotes({ diff, grade, points, putts, greens, holeSummary, tee }) {
   const notes = [grade.summary];
-  const diff = seconds - standardSeconds;
 
-  if (Math.abs(diff) < 5) {
-    notes.push('部門の基準タイムとほぼ同じ。まさに標準ペースで走り切りました。');
-  } else if (diff < 0) {
-    notes.push(`部門の基準タイムより ${formatTime(-diff)} 速い記録です。`);
-  } else {
-    notes.push(`部門の基準タイムまであと ${formatTime(diff)}。`);
-  }
+  notes.push(
+    `${tee.label}ティー（${tee.yards}ヤード・パー${COURSE.par}）でパーとの差は ${formatDiff(diff)}。` +
+      `推定で上位 ${estimatedTopPercent(diff).toFixed(0)}% のスコアです。`,
+  );
 
-  if (condition.factor > 1) {
-    notes.push('タフなコース設定として補正済みです。同じ走力でも平坦路より数十秒は遅くなります。');
-  } else if (condition.factor < 1) {
-    notes.push('走りやすいコース設定として補正済みです。その分だけ基準タイムも速くしています。');
-  }
+  if (holeSummary) {
+    const { counts, out, in: inSide, byPar, worst } = holeSummary;
+    const parOrBetter = counts.eagle + counts.birdie + counts.par;
+    notes.push(
+      `パー以上が ${parOrBetter}ホール、ボギー ${counts.bogey}、ダブルボギー ${counts.double}、` +
+        `トリプル以上が ${counts.triple}ホール。`,
+    );
 
-  if (placePercent !== null && Number.isFinite(estimatedPercent)) {
-    const gap = placePercent - estimatedPercent;
-    if (gap < -8) {
+    if (counts.triple >= 3) {
       notes.push(
-        `実際の順位は上位 ${placePercent.toFixed(0)}%。タイムから想定される ${estimatedPercent.toFixed(0)}% より上位で、当日は層の厚い組でよく戦えています。`,
+        `トリプル以上が ${counts.triple} ホール。ここをダブルボギーで止めるだけで ` +
+          `${counts.triple}打前後は縮みます。スコアを崩すのはたいてい2打目の欲張りです。`,
       );
-    } else if (gap > 8) {
+    }
+
+    if (out.strokes > 0 && inSide.strokes > 0) {
+      const outOver = out.strokes - out.par;
+      const inOver = inSide.strokes - inSide.par;
+      if (Math.abs(outOver - inOver) >= 4) {
+        const worseSide = outOver > inOver ? 'OUT' : 'IN';
+        notes.push(
+          `OUT ${out.strokes}（${formatDiff(outOver)}）／ IN ${inSide.strokes}（${formatDiff(inOver)}）。` +
+            `${worseSide} で崩れています。`,
+        );
+      } else {
+        notes.push(`OUT ${out.strokes}／ IN ${inSide.strokes}。前後半の差は小さく、安定して回れています。`);
+      }
+    }
+
+    const weakest = byPar.filter((g) => g.overPar !== null).sort((a, b) => b.overPar - a.overPar)[0];
+    if (weakest && weakest.overPar >= 1.5) {
+      const advice = {
+        3: 'ショートホールはピンではなくグリーンセンターを狙うと大崩れが減ります。',
+        4: 'ミドルホールはティーショットをフェアウェイに置くことが最優先です。',
+        5: 'ロングホールは2打目を刻んで、3打目を得意な距離に残すのが近道です。',
+      }[weakest.par];
+      notes.push(`パー${weakest.par}が平均 ${formatDiff(Math.round(weakest.overPar * 10) / 10)} と苦しんでいます。${advice}`);
+    }
+
+    if (worst) {
+      const hole = HOLES.find((h) => h.no === worst.hole.no);
+      const detail = hole?.note ? `（${hole.note}）` : '';
       notes.push(
-        `実際の順位は上位 ${placePercent.toFixed(0)}%。タイムのわりに順位が伸びていないので、周りのレベルが高い部門です。`,
+        `いちばん叩いたのは ${worst.hole.no}番・パー${worst.hole.par} の ${worst.strokes}打${detail}。`,
       );
-    } else {
-      notes.push(`実際の順位（上位 ${placePercent.toFixed(0)}%）はタイムから想定される位置どおりです。`);
     }
   }
 
-  if (ratio < 0.85) {
-    notes.push('前半から押していける走力があります。次は同じ部門の入賞ラインを目標に。');
-  } else if (ratio > 1.15) {
-    notes.push('後半の落ち込みが大きい可能性があります。最初の 1km を目標ペース +10 秒で入るだけで記録は変わります。');
-  } else {
-    notes.push('ペース配分は悪くありません。登りで粘れるかどうかが次のひと伸びです。');
+  if (putts !== null) {
+    const perHole = putts / COURSE.holeCount;
+    if (perHole >= 2.2) {
+      notes.push(`パット ${putts}（1ホール平均 ${perHole.toFixed(2)}）。3パットを減らすのがいちばん手早い短縮です。`);
+    } else if (perHole <= 1.8) {
+      notes.push(`パット ${putts}（1ホール平均 ${perHole.toFixed(2)}）。グリーン上は好調。伸ばすならショットの精度です。`);
+    } else {
+      notes.push(`パット ${putts}（1ホール平均 ${perHole.toFixed(2)}）。アマチュアとしては標準的な数字です。`);
+    }
   }
 
-  if (score >= 100) {
-    notes.push('この評価スケールの上限に到達しています。基準タイムの見直しどきかもしれません。');
+  if (greens !== null) {
+    const rate = (greens / COURSE.holeCount) * 100;
+    notes.push(`パーオン ${greens}／18（${rate.toFixed(0)}%）。100切りの目安は3〜5ホールです。`);
+  }
+
+  if (tee.estimated) {
+    notes.push('コースレート／スロープレートは推定値です。スコアカード記載の値に差し替えると、推定ハンディキャップが正確になります。');
+  }
+
+  if (points >= 100) {
+    notes.push('この評価スケールの上限です。基準の見直しどきかもしれません。');
   }
 
   return notes;

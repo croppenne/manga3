@@ -2,99 +2,151 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
-  actualTopPercent,
-  equivalentTime,
+  diffForPoints,
   estimatedTopPercent,
   evaluate,
-  formatPace,
-  formatTime,
+  formatDiff,
   gradeFor,
+  handicapAllowance,
+  handicapIndex,
+  holeResultKey,
   normalCdf,
-  parseTime,
-  ratioForScore,
-  scoreFromRatio,
-  standardTime,
-  timeForScore,
+  parseStrokes,
+  pointsFromDiff,
+  scoreDifferential,
+  summarizeHoles,
 } from '../src/scoring.js';
-import { BASE_DISTANCE_KM, findDivision } from '../src/criteria.js';
+import { COURSE, HOLES, TEES, findTee, totalPar } from '../src/course.js';
 
-test('parseTime は色々な書き方を秒に直す', () => {
-  assert.equal(parseTime('12:34'), 754);
-  assert.equal(parseTime('1:02:03'), 3723);
-  assert.equal(parseTime("12'34"), 754);
-  assert.equal(parseTime('12分34秒'), 754);
-  assert.equal(parseTime('12.34'), 754);
-  assert.equal(parseTime('１２:３４'), 754);
-  assert.equal(parseTime(' 754 '), 754);
-  assert.equal(parseTime(754), 754);
+/** パー通りに回った 18 ホール分の打数。 */
+const evenPar = HOLES.map((h) => h.par);
+
+test('コースデータのパー合計が公表値と一致する', () => {
+  assert.equal(totalPar(), COURSE.par);
+  assert.equal(HOLES.length, COURSE.holeCount);
+  assert.equal(HOLES.filter((h) => h.side === 'OUT').reduce((s, h) => s + h.par, 0), 36);
+  assert.equal(HOLES.filter((h) => h.side === 'IN').reduce((s, h) => s + h.par, 0), 36);
 });
 
-test('parseTime は読めない入力を null にする', () => {
-  for (const bad of ['', 'abc', '12:99', '1:2:3:4', '-5', '0', null, undefined, {}]) {
-    assert.equal(parseTime(bad), null, `期待: null（入力 ${JSON.stringify(bad)}）`);
+test('ティーはヤードが長いほどコースレートも高い', () => {
+  const sorted = [...TEES].sort((a, b) => a.yards - b.yards);
+  for (let i = 1; i < sorted.length; i += 1) {
+    assert.ok(sorted[i].courseRating > sorted[i - 1].courseRating);
+    assert.ok(sorted[i].slope > sorted[i - 1].slope);
   }
 });
 
-test('formatTime / formatPace は桁を揃える', () => {
-  assert.equal(formatTime(754), '12:34');
-  assert.equal(formatTime(3723), '1:02:03');
-  assert.equal(formatTime(59.6), '1:00');
-  assert.equal(formatPace(251), "4'11\"/km");
+test('parseStrokes は打数だけを受け取る', () => {
+  assert.equal(parseStrokes('94'), 94);
+  assert.equal(parseStrokes('９４'), 94);
+  assert.equal(parseStrokes(' 94 '), 94);
+  assert.equal(parseStrokes(94), 94);
+  for (const bad of ['', '9.4', '-3', '0', 'abc', 94.5, null, undefined, {}]) {
+    assert.equal(parseStrokes(bad), null, `期待: null（入力 ${JSON.stringify(bad)}）`);
+  }
 });
 
-test('equivalentTime は距離が伸びるとペースを落とす', () => {
-  const t5 = equivalentTime(1200, 3, 5);
-  assert.ok(t5 > 1200 * (5 / 3), 'Riegel は単純比例より遅くなる');
-  assert.ok(Math.abs(equivalentTime(1200, 3, 3) - 1200) < 1e-9, '同距離なら不変');
-  const back = equivalentTime(t5, 5, 3);
-  assert.ok(Math.abs(back - 1200) < 1e-6, '往復すると元に戻る');
+test('formatDiff は符号を日本語表記に揃える', () => {
+  assert.equal(formatDiff(0), '±0');
+  assert.equal(formatDiff(28), '+28');
+  assert.equal(formatDiff(-2), '−2');
 });
 
-test('standardTime は基準距離でそのまま base3k を返す', () => {
-  const division = findDivision('a30m');
-  assert.equal(standardTime(division, BASE_DISTANCE_KM, 1), division.base3k);
-  assert.ok(standardTime(division, BASE_DISTANCE_KM, 1.06) > division.base3k, 'タフなコースは基準が緩む');
+test('評価ランクの境界が 70台・80台・90台… と一致する', () => {
+  const rankOf = (strokes) => gradeFor(pointsFromDiff(strokes - COURSE.par)).rank;
+  assert.equal(rankOf(72), 'S');
+  assert.equal(rankOf(79), 'S');
+  assert.equal(rankOf(80), 'A');
+  assert.equal(rankOf(89), 'A');
+  assert.equal(rankOf(90), 'B');
+  assert.equal(rankOf(99), 'B');
+  assert.equal(rankOf(100), 'C');
+  assert.equal(rankOf(109), 'C');
+  assert.equal(rankOf(110), 'D');
+  assert.equal(rankOf(119), 'D');
+  assert.equal(rankOf(120), 'E');
+  assert.equal(rankOf(150), 'E');
 });
 
-test('基準タイムちょうどで 60 点・評価C になる', () => {
-  assert.equal(Math.round(scoreFromRatio(1)), 60);
-  assert.equal(gradeFor(60).rank, 'C');
-});
-
-test('scoreFromRatio は速いほど高得点で、0〜100 に収まる', () => {
+test('pointsFromDiff は打つほど下がり、0〜100 に収まる', () => {
   let previous = Infinity;
-  for (let ratio = 0.5; ratio <= 2.5; ratio += 0.01) {
-    const score = scoreFromRatio(ratio);
-    assert.ok(score >= 0 && score <= 100, `範囲外: ${score}`);
-    assert.ok(score <= previous + 1e-9, `単調減少でない: ratio=${ratio}`);
-    previous = score;
+  for (let diff = -10; diff <= 130; diff += 1) {
+    const points = pointsFromDiff(diff);
+    assert.ok(points >= 0 && points <= 100, `範囲外: ${points}`);
+    assert.ok(points <= previous + 1e-9, `単調減少でない: diff=${diff}`);
+    previous = points;
   }
-  assert.equal(scoreFromRatio(0.4), 100);
-  assert.equal(scoreFromRatio(3), 0);
+  assert.equal(pointsFromDiff(-20), 100);
+  assert.equal(pointsFromDiff(200), 0);
 });
 
-test('ratioForScore は scoreFromRatio の逆関数になっている', () => {
-  for (let score = 1; score <= 99; score += 1) {
-    const ratio = ratioForScore(score);
-    assert.ok(Math.abs(scoreFromRatio(ratio) - score) < 1e-6, `score=${score} で往復しない`);
+test('diffForPoints は pointsFromDiff の逆関数になっている', () => {
+  for (let points = 1; points <= 99; points += 1) {
+    const diff = diffForPoints(points);
+    assert.ok(Math.abs(pointsFromDiff(diff) - points) < 1e-6, `points=${points} で往復しない`);
   }
 });
 
-test('timeForScore はその得点に必要なタイムを返す', () => {
-  const standard = 700;
-  const target = timeForScore(80, standard);
-  assert.ok(target < standard, '80点は基準より速い');
-  const result = scoreFromRatio(target / standard);
-  assert.ok(Math.abs(result - 80) < 1e-6);
+test('スコアディファレンシャルが WHS の式どおりに出る', () => {
+  const tee = findTee('back');
+  const expected = (113 / tee.slope) * (100 - tee.courseRating);
+  assert.ok(Math.abs(scoreDifferential(100, tee) - expected) < 1e-9);
+  assert.ok(scoreDifferential(90, tee) < scoreDifferential(100, tee), '良いスコアほど指数は小さい');
 });
 
-test('gradeFor は境界値を上のランクに入れる', () => {
-  assert.equal(gradeFor(100).rank, 'S');
-  assert.equal(gradeFor(90).rank, 'S');
-  assert.equal(gradeFor(89.9).rank, 'A');
-  assert.equal(gradeFor(60).rank, 'C');
-  assert.equal(gradeFor(44.9).rank, 'E');
-  assert.equal(gradeFor(0).rank, 'E');
+test('少数ラウンド表が WHS の規定どおり', () => {
+  assert.equal(handicapAllowance(2), null);
+  assert.deepEqual(handicapAllowance(3), { use: 1, adjustment: -2 });
+  assert.deepEqual(handicapAllowance(4), { use: 1, adjustment: -1 });
+  assert.deepEqual(handicapAllowance(5), { use: 1, adjustment: 0 });
+  assert.deepEqual(handicapAllowance(6), { use: 2, adjustment: -1 });
+  assert.deepEqual(handicapAllowance(8), { use: 2, adjustment: 0 });
+  assert.deepEqual(handicapAllowance(20), { use: 8, adjustment: 0 });
+  assert.deepEqual(handicapAllowance(40), { use: 8, adjustment: 0 });
+});
+
+test('handicapIndex は最良ディファレンシャルから計算する', () => {
+  assert.equal(handicapIndex([20, 22]), null, '3ラウンド未満は出さない');
+  assert.equal(handicapIndex([20, 22, 26]), 18, '3ラウンドなら最良1本 −2.0');
+  assert.equal(handicapIndex([20, 22, 26, 30]), 19, '4ラウンドなら最良1本 −1.0');
+  assert.equal(handicapIndex([20, 22, 26, 30, 31]), 20, '5ラウンドなら最良1本そのまま');
+  assert.equal(handicapIndex([20, 22, 26, 30, 31, 33]), 20, '6ラウンドなら最良2本の平均 −1.0');
+});
+
+test('holeResultKey がスコアの呼び名を返す', () => {
+  assert.equal(holeResultKey(2, 4), 'eagle');
+  assert.equal(holeResultKey(3, 4), 'birdie');
+  assert.equal(holeResultKey(4, 4), 'par');
+  assert.equal(holeResultKey(5, 4), 'bogey');
+  assert.equal(holeResultKey(6, 4), 'double');
+  assert.equal(holeResultKey(9, 4), 'triple');
+  assert.equal(holeResultKey(1, 3), 'eagle', 'ホールインワンはイーグル以上');
+});
+
+test('summarizeHoles が内訳と前後半を集計する', () => {
+  assert.equal(summarizeHoles(HOLES.map(() => null)), null, '未入力なら null');
+
+  const all = summarizeHoles(evenPar);
+  assert.equal(all.holesEntered, 18);
+  assert.equal(all.strokes, COURSE.par);
+  assert.equal(all.counts.par, 18);
+  assert.equal(all.out.strokes, 36);
+  assert.equal(all.in.strokes, 36);
+  for (const group of all.byPar) assert.equal(group.overPar, 0);
+
+  const partial = summarizeHoles(evenPar.map((p, i) => (i < 9 ? p + 1 : null)));
+  assert.equal(partial.holesEntered, 9);
+  assert.equal(partial.strokes, 45);
+  assert.equal(partial.counts.bogey, 9);
+  assert.equal(partial.in.strokes, 0);
+});
+
+test('summarizeHoles がいちばん叩いたホールを見つける', () => {
+  const strokes = [...evenPar];
+  strokes[10] += 5; // 11番
+  const summary = summarizeHoles(strokes);
+  assert.equal(summary.worst.hole.no, 11);
+  assert.equal(summary.worst.strokes, HOLES[10].par + 5);
 });
 
 test('normalCdf が標準正規分布の値に一致する', () => {
@@ -103,63 +155,66 @@ test('normalCdf が標準正規分布の値に一致する', () => {
   assert.ok(Math.abs(normalCdf(-1.96) - 0.025) < 1e-3);
 });
 
-test('estimatedTopPercent は速いほど上位で 1〜99 に収まる', () => {
-  const standard = 700;
-  const fast = estimatedTopPercent(500, standard);
-  const slow = estimatedTopPercent(1000, standard);
-  assert.ok(fast < slow);
-  for (const t of [100, 500, 700, 1200, 5000]) {
-    const p = estimatedTopPercent(t, standard);
+test('estimatedTopPercent は良いスコアほど上位で 1〜99 に収まる', () => {
+  assert.ok(estimatedTopPercent(10) < estimatedTopPercent(40));
+  assert.ok(Math.abs(estimatedTopPercent(28) - 50) < 1, '平均100打がほぼ上位50%');
+  for (const diff of [-5, 0, 28, 60, 120]) {
+    const p = estimatedTopPercent(diff);
     assert.ok(p >= 1 && p <= 99, `範囲外: ${p}`);
   }
 });
 
-test('actualTopPercent は順位を割合に直す', () => {
-  assert.equal(actualTopPercent(1, 100), 0.5);
-  assert.equal(actualTopPercent(100, 100), 99.5);
-  assert.equal(actualTopPercent(101, 100), null, '完走者数を超える順位は無効');
-  assert.equal(actualTopPercent(0, 100), null);
-});
-
 test('evaluate は入力エラーを日本語で返す', () => {
-  assert.equal(evaluate({ divisionId: 'nope', distanceKm: 3, timeInput: '12:00' }).ok, false);
-  assert.equal(evaluate({ divisionId: 'a30m', distanceKm: 0, timeInput: '12:00' }).ok, false);
-  assert.equal(evaluate({ divisionId: 'a30m', distanceKm: 3, timeInput: 'はやい' }).ok, false);
+  assert.equal(evaluate({ teeId: 'nope', strokes: 94 }).ok, false);
+  assert.equal(evaluate({ teeId: 'regular', strokes: '' }).ok, false);
+  assert.equal(evaluate({ teeId: 'regular', strokes: 'abc' }).ok, false);
+  assert.equal(evaluate({ teeId: 'regular', strokes: 12 }).ok, false, '18ホールに満たない打数');
+  assert.equal(evaluate({ teeId: 'regular', strokes: 400 }).ok, false, '大きすぎる打数');
 });
 
-test('evaluate は一式そろった結果を返す', () => {
-  const result = evaluate({
-    divisionId: 'a30m',
-    distanceKm: 3,
-    timeInput: '10:00',
-    conditionId: 'standard',
-    place: 5,
-    finishers: 120,
-  });
+test('evaluate は合計スコアだけで一式そろった結果を返す', () => {
+  const result = evaluate({ teeId: 'regular', strokes: 94, putts: 33, greens: 5 });
   assert.equal(result.ok, true);
-  assert.equal(result.seconds, 600);
-  assert.equal(result.standardSeconds, 660);
-  assert.ok(result.score > 60, '基準より速いので 60 点超');
+  assert.equal(result.strokes, 94);
+  assert.equal(result.diff, 22);
+  assert.equal(result.grade.rank, 'B');
+  assert.equal(result.shotsWithoutPutts, 61);
+  assert.ok(Math.abs(result.puttsPerHole - 33 / 18) < 1e-9);
+  assert.ok(Math.abs(result.greenRate - (5 / 18) * 100) < 1e-9);
+  assert.equal(result.handicapIndex, null, '履歴が無ければハンディキャップは出ない');
   assert.ok(result.notes.length >= 3);
-  assert.ok(result.equivalents.every((e) => e.km !== 3), '入力距離は換算表から除く');
-  assert.ok(Math.abs(result.placePercent - 3.75) < 1e-9);
-  assert.ok(result.target.seconds < result.seconds, '目標は今より速い');
+  assert.ok(result.target.strokes < result.strokes, '目標はいまより少ない打数');
 });
 
-test('コース状況が評価に効く', () => {
-  const base = { divisionId: 'a30m', distanceKm: 5, timeInput: '22:00' };
-  const fast = evaluate({ ...base, conditionId: 'fast' });
-  const tough = evaluate({ ...base, conditionId: 'tough' });
-  assert.ok(tough.score > fast.score, '同じタイムならタフなコースの方が高評価');
+test('18ホール入力なら合計スコアを自分で出す', () => {
+  const strokes = evenPar.map((p) => p + 1); // 全ホール ボギー
+  const result = evaluate({ teeId: 'regular', holeStrokes: strokes });
+  assert.equal(result.ok, true);
+  assert.equal(result.strokes, COURSE.par + 18);
+  assert.equal(result.allHolesEntered, true);
+  assert.equal(result.holeSummary.counts.bogey, 18);
 });
 
-test('全部門で基準タイムちょうどが C 評価になる', () => {
-  for (const km of [1, 2, 3, 5, 10]) {
-    for (const id of ['e12f', 'e56m', 'jhm', 'hsf', 'a30m', 'a70f']) {
-      const division = findDivision(id);
-      const seconds = standardTime(division, km, 1);
-      const result = evaluate({ divisionId: id, distanceKm: km, timeInput: seconds });
-      assert.equal(result.grade.rank, 'C', `${id} / ${km}km`);
-    }
-  }
+test('ホール別入力は合計スコア欄より優先される', () => {
+  const result = evaluate({ teeId: 'regular', strokes: 200, holeStrokes: evenPar });
+  assert.equal(result.strokes, COURSE.par);
+});
+
+test('ティーが変わるとディファレンシャルだけが変わる', () => {
+  const back = evaluate({ teeId: 'back', strokes: 94 });
+  const front = evaluate({ teeId: 'front', strokes: 94 });
+  assert.equal(back.points, front.points, '評価点はコースのパーとの差で決まる');
+  assert.ok(back.differential < front.differential, '長いティーの方が同じスコアでも指数は良い');
+});
+
+test('履歴がたまるとハンディキャップ指数が出る', () => {
+  const result = evaluate({
+    teeId: 'regular',
+    strokes: 94,
+    pastDifferentials: [26.5, 30.1, 28.4],
+  });
+  assert.equal(result.roundsUsed, 4);
+  assert.ok(result.handicapIndex !== null);
+  const expected = handicapIndex([result.differential, 26.5, 30.1, 28.4]);
+  assert.equal(result.handicapIndex, expected);
 });

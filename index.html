@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>赤とんぼクロスカントリー 記録評価</title>
-<meta name="description" content="赤とんぼクロスカントリーのタイムを入力すると、部門別の基準タイムと比べて100点満点で評価します。">
+<title>赤とんぼCC スコア評価</title>
+<meta name="description" content="赤とんぼカントリークラブのスコアを入力すると、100点満点の評価・推定ハンディキャップ・ホール別の内訳を出します。">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=Zen+Old+Mincho:wght@600&display=swap">
@@ -22,8 +22,8 @@
       <path d="M20 39h8" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/>
     </svg>
     <div>
-      <h1>赤とんぼクロスカントリー 記録評価</h1>
-      <p>部門と距離、完走タイムを入れると、部門の基準タイムと比べて100点満点で採点します。推定順位・目標タイム・他距離の換算まで一度に出ます。</p>
+      <h1>赤とんぼCC スコア評価</h1>
+      <p id="courseLine"></p>
     </div>
     <button type="button" class="theme-toggle" id="themeToggle">配色を切り替え</button>
   </header>
@@ -33,44 +33,43 @@
     <!-- ===== 入力 ===== -->
     <section class="panel" aria-labelledby="inputHeading">
       <p class="eyebrow">入力</p>
-      <h2 id="inputHeading">レースの記録</h2>
+      <h2 id="inputHeading">ラウンドのスコア</h2>
 
       <form id="scoreForm" class="stack" novalidate>
-        <label class="field" for="division">
-          <span>部門</span>
-          <select id="division" name="division"></select>
+        <label class="field" for="tee">
+          <span>ティー</span>
+          <select id="tee" name="tee"></select>
         </label>
 
+        <div class="seg" role="group" aria-label="スコアの入力方法">
+          <button type="button" class="seg-btn is-on" id="modeTotal" aria-pressed="true">合計だけ</button>
+          <button type="button" class="seg-btn" id="modeHoles" aria-pressed="false">18ホール入力</button>
+        </div>
+
+        <label class="field" for="strokes" id="totalField">
+          <span>合計スコア <span class="hint">打</span></span>
+          <input id="strokes" name="strokes" type="number" inputmode="numeric" step="1" min="18" max="216" required>
+        </label>
+
+        <div id="holesField" hidden>
+          <div class="scorecard" id="scorecard"></div>
+          <p class="scorecard-total" id="scorecardTotal"></p>
+        </div>
+
         <div class="row">
-          <label class="field" for="distance">
-            <span>距離 <span class="hint">km</span></span>
-            <input id="distance" name="distance" type="number" inputmode="decimal" step="0.1" min="0.1" max="100" required>
+          <label class="field" for="putts">
+            <span>パット数 <span class="hint">任意</span></span>
+            <input id="putts" name="putts" type="number" inputmode="numeric" step="1" min="0" max="72" placeholder="—">
           </label>
-          <label class="field" for="time">
-            <span>完走タイム <span class="hint">分:秒</span></span>
-            <input id="time" name="time" type="text" inputmode="numeric" placeholder="12:34" autocomplete="off" required>
+          <label class="field" for="greens">
+            <span>パーオン <span class="hint">任意・18中</span></span>
+            <input id="greens" name="greens" type="number" inputmode="numeric" step="1" min="0" max="18" placeholder="—">
           </label>
         </div>
 
-        <label class="field" for="condition">
-          <span>コース状況</span>
-          <select id="condition" name="condition"></select>
-        </label>
-
-        <div class="row">
-          <label class="field" for="place">
-            <span>順位 <span class="hint">任意</span></span>
-            <input id="place" name="place" type="number" inputmode="numeric" step="1" min="1" placeholder="—">
-          </label>
-          <label class="field" for="finishers">
-            <span>完走者数 <span class="hint">任意</span></span>
-            <input id="finishers" name="finishers" type="number" inputmode="numeric" step="1" min="1" placeholder="—">
-          </label>
-        </div>
-
-        <label class="field" for="raceDate">
-          <span>開催日 <span class="hint">履歴の並び順に使います</span></span>
-          <input id="raceDate" name="raceDate" type="date">
+        <label class="field" for="playDate">
+          <span>プレー日 <span class="hint">履歴の並び順に使います</span></span>
+          <input id="playDate" name="playDate" type="date">
         </label>
 
         <p class="error" id="formError" role="alert" hidden></p>
@@ -84,15 +83,15 @@
 
     <!-- ===== 評価結果 ===== -->
     <div>
-      <section class="panel" aria-labelledby="resultHeading" id="resultPanel">
+      <section class="panel" aria-labelledby="resultHeading">
         <p class="eyebrow">評価</p>
-        <h2 id="resultHeading">この記録の評価</h2>
+        <h2 id="resultHeading">このラウンドの評価</h2>
 
         <div class="verdict">
           <div class="rank-chip" id="rankChip" data-rank="C" aria-hidden="true">C</div>
           <div class="verdict-text">
             <div class="verdict-score"><span id="scoreValue">—</span><small>/ 100点</small></div>
-            <div class="verdict-label" id="rankLabel">部門と距離、タイムを入力してください</div>
+            <div class="verdict-label" id="rankLabel">スコアを入力してください</div>
             <div class="verdict-meta" id="verdictMeta"></div>
           </div>
         </div>
@@ -111,20 +110,23 @@
         <p class="target" id="target" hidden></p>
       </section>
 
-      <section class="panel" aria-labelledby="equivHeading">
-        <p class="eyebrow">距離換算</p>
-        <h2 id="equivHeading">同じ走力なら、他の距離は</h2>
-        <div class="table-scroll">
+      <section class="panel" aria-labelledby="breakdownHeading" id="breakdownPanel" hidden>
+        <p class="eyebrow">内訳</p>
+        <h2 id="breakdownHeading">18ホールの中身</h2>
+
+        <dl class="stats" id="resultCounts"></dl>
+
+        <div class="table-scroll" style="margin-top:20px">
           <table>
             <thead>
               <tr>
-                <th scope="col">距離</th>
-                <th scope="col" class="num">想定タイム</th>
-                <th scope="col" class="num">ペース</th>
-                <th scope="col" class="num">部門の基準</th>
+                <th scope="col">区分</th>
+                <th scope="col" class="num">ホール</th>
+                <th scope="col" class="num">平均</th>
+                <th scope="col" class="num">パーとの差</th>
               </tr>
             </thead>
-            <tbody id="equivBody"></tbody>
+            <tbody id="byParBody"></tbody>
           </table>
         </div>
       </section>
@@ -147,12 +149,12 @@
       <table>
         <thead>
           <tr>
-            <th scope="col">開催日</th>
-            <th scope="col">部門</th>
-            <th scope="col" class="num">距離</th>
-            <th scope="col" class="num">タイム</th>
-            <th scope="col" class="num">ペース</th>
+            <th scope="col">プレー日</th>
+            <th scope="col">ティー</th>
             <th scope="col" class="num">スコア</th>
+            <th scope="col" class="num">パー差</th>
+            <th scope="col" class="num">パット</th>
+            <th scope="col" class="num">評価点</th>
             <th scope="col">評価</th>
             <th scope="col"></th>
           </tr>
@@ -167,9 +169,9 @@
   </section>
 
   <footer class="colophon">
-    <p><strong>評価の根拠。</strong>部門ごとに「平均的な完走者の3kmタイム」を基準タイムとして持ち、Riegel 式（指数 1.06）で入力距離に換算します。基準タイムちょうどが60点・評価C、そこからの比率を折れ線で0〜100点に写します。推定順位は完走タイムが対数正規分布に従うという仮定による目安です。</p>
-    <p>基準タイムは一般的な市民クロスカントリーの完走タイムから置いた暫定値で、大会公式の記録ではありません。過去のリザルトが手元にあれば <code>src/criteria.js</code> の <code>base3k</code> を実データの平均に差し替えてください。全部門・全距離の評価がそのまま更新されます。</p>
-    <p>入力した記録はこの端末のブラウザにだけ保存されます。どこにも送信されません。</p>
+    <p><strong>評価の根拠。</strong>コースのパー72との差を折れ線で0〜100点に写します。区切りは 70台=S／80台=A／90台=B／100台=C／110台=D／120以上=E。推定ハンディキャップは <code>(113 ÷ スロープレート) × (スコア − コースレート)</code> でスコアディファレンシャルを出し、3ラウンド以上たまるとワールドハンディキャップシステムの少数ラウンド表で指数にします。推定順位はアマチュアのスコアが平均100打・標準偏差13打の正規分布に従うという仮定による目安です。</p>
+    <p id="dataNote"></p>
+    <p>入力したスコアはこの端末のブラウザにだけ保存されます。どこにも送信されません。</p>
   </footer>
 
 </div>

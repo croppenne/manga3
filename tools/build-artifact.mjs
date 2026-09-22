@@ -19,7 +19,7 @@ import { fileURLToPath } from 'node:url';
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 
 /** 依存順。後ろのファイルが前のファイルの宣言を使えます。 */
-const MODULES = ['src/criteria.js', 'src/scoring.js', 'src/history.js', 'src/app.js'];
+const MODULES = ['src/course.js', 'src/scoring.js', 'src/history.js', 'src/app.js'];
 
 /** import 文を丸ごと落とし、export キーワードだけ外す。 */
 function stripModuleSyntax(source, file) {

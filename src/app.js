@@ -1,36 +1,38 @@
 /**
  * 画面の組み立てとイベント配線。
- * 計算は scoring.js、保存は history.js が担当します。
+ * 計算は scoring.js、コースデータは course.js、保存は history.js が担当します。
  */
 
 import {
-  COURSE_CONDITIONS,
-  DEFAULT_CONDITION_ID,
-  DEFAULT_DISTANCE_KM,
-  DEFAULT_DIVISION_ID,
-  DIVISIONS,
+  COURSE,
+  DEFAULT_TEE_ID,
   GRADES,
-  findDivision,
-} from './criteria.js';
-import {
-  evaluate,
-  formatPace,
-  formatTime,
-  standardTime,
-} from './scoring.js';
+  HOLES,
+  HOLE_RESULTS,
+  MAX_STROKES_PER_HOLE,
+  TEES,
+  findTee,
+} from './course.js';
+import { evaluate, formatDiff, scoreDifferential } from './scoring.js';
 import { addRecord, clearRecords, loadRecords, makeId, removeRecord } from './history.js';
 
 const $ = (id) => document.getElementById(id);
 
 const els = {
   form: $('scoreForm'),
-  division: $('division'),
-  distance: $('distance'),
-  time: $('time'),
-  condition: $('condition'),
-  place: $('place'),
-  finishers: $('finishers'),
-  raceDate: $('raceDate'),
+  courseLine: $('courseLine'),
+  dataNote: $('dataNote'),
+  tee: $('tee'),
+  modeTotal: $('modeTotal'),
+  modeHoles: $('modeHoles'),
+  totalField: $('totalField'),
+  holesField: $('holesField'),
+  scorecard: $('scorecard'),
+  scorecardTotal: $('scorecardTotal'),
+  strokes: $('strokes'),
+  putts: $('putts'),
+  greens: $('greens'),
+  playDate: $('playDate'),
   error: $('formError'),
   saveButton: $('saveButton'),
   rankChip: $('rankChip'),
@@ -43,7 +45,9 @@ const els = {
   stats: $('stats'),
   notes: $('notes'),
   target: $('target'),
-  equivBody: $('equivBody'),
+  breakdownPanel: $('breakdownPanel'),
+  resultCounts: $('resultCounts'),
+  byParBody: $('byParBody'),
   chartHolder: $('chartHolder'),
   historyBody: $('historyBody'),
   clearHistory: $('clearHistory'),
@@ -51,54 +55,51 @@ const els = {
   themeToggle: $('themeToggle'),
 };
 
-/** 画面が空っぽに見えないよう、保存がないときだけ出すサンプル履歴。 */
-const SAMPLE_RECORDS = [
-  { date: '2023-10-15', divisionId: 'a30m', distanceKm: 3, seconds: 738, conditionId: 'standard' },
-  { date: '2024-10-20', divisionId: 'a30m', distanceKm: 3, seconds: 702, conditionId: 'standard' },
-  { date: '2025-10-19', divisionId: 'a30m', distanceKm: 3, seconds: 624, conditionId: 'standard' },
+/** 保存がまだ無いときだけ出すサンプル履歴。画面が空っぽに見えないように。 */
+const SAMPLE_ROUNDS = [
+  { date: '2025-04-12', teeId: 'regular', strokes: 112, putts: 38 },
+  { date: '2025-06-21', teeId: 'regular', strokes: 104, putts: 36 },
+  { date: '2025-09-06', teeId: 'regular', strokes: 99, putts: 34 },
+  { date: '2026-05-16', teeId: 'regular', strokes: 94, putts: 33 },
 ].map((r) => {
-  const result = evaluate({ ...r, timeInput: r.seconds });
+  const result = evaluate({ teeId: r.teeId, strokes: r.strokes, putts: r.putts });
   return {
     ...r,
     id: `sample-${r.date}`,
-    score: result.score,
+    points: result.points,
     rank: result.grade.rank,
+    diff: result.diff,
+    differential: result.differential,
     sample: true,
   };
 });
 
 let lastResult = null;
+let holeInputs = [];
+let holeMode = false;
 
 /* ------------------------------------------------------------------ */
 /* 初期化                                                              */
 /* ------------------------------------------------------------------ */
 
-function fillSelects() {
-  const groups = new Map();
-  for (const d of DIVISIONS) {
-    if (!groups.has(d.group)) groups.set(d.group, []);
-    groups.get(d.group).push(d);
-  }
-  for (const [group, items] of groups) {
-    const og = document.createElement('optgroup');
-    og.label = group;
-    for (const d of items) {
-      const opt = document.createElement('option');
-      opt.value = d.id;
-      opt.textContent = d.label;
-      og.append(opt);
-    }
-    els.division.append(og);
-  }
-  els.division.value = DEFAULT_DIVISION_ID;
+function fillCourseText() {
+  els.courseLine.textContent =
+    `${COURSE.prefecture}・${COURSE.name}（旧 ${COURSE.formerName}）。` +
+    `${COURSE.holeCount}ホール パー${COURSE.par}／バックティ ${COURSE.backTeeYards.toLocaleString()}ヤード／` +
+    `${COURSE.green}。スコアを入れると100点満点の評価と推定ハンディキャップを出します。`;
 
-  for (const c of COURSE_CONDITIONS) {
+  els.dataNote.textContent =
+    'コースの基本情報（パー72・6,539ヤード・ベント1グリーン・三浦一美設計・1994年開場）は公開情報にもとづく値です。' +
+    'コースレート／スロープレートとホール別のパーは公表値を確認できなかったため、同規模のコースの一般的な値を暫定で置いています。' +
+    'スコアカードの数字を src/course.js に書き写すと、推定ハンディキャップとホール別の評価が正確になります。';
+
+  for (const tee of TEES) {
     const opt = document.createElement('option');
-    opt.value = c.id;
-    opt.textContent = c.label;
-    els.condition.append(opt);
+    opt.value = tee.id;
+    opt.textContent = `${tee.label}　${tee.yards.toLocaleString()}yd　CR ${tee.courseRating.toFixed(1)}`;
+    els.tee.append(opt);
   }
-  els.condition.value = DEFAULT_CONDITION_ID;
+  els.tee.value = DEFAULT_TEE_ID;
 }
 
 function renderMeterTicks() {
@@ -118,18 +119,98 @@ function renderMeterTicks() {
   }
 }
 
+function buildScorecard() {
+  els.scorecard.replaceChildren();
+  holeInputs = [];
+
+  for (const side of ['OUT', 'IN']) {
+    const group = document.createElement('div');
+    group.className = 'card-side';
+
+    const heading = document.createElement('p');
+    heading.className = 'card-side-head';
+    heading.textContent = side;
+    group.append(heading);
+
+    const grid = document.createElement('div');
+    grid.className = 'card-grid';
+
+    for (const hole of HOLES.filter((h) => h.side === side)) {
+      const cell = document.createElement('label');
+      cell.className = 'card-cell';
+      cell.htmlFor = `hole-${hole.no}`;
+
+      const no = document.createElement('span');
+      no.className = 'card-no';
+      no.textContent = String(hole.no);
+
+      const par = document.createElement('span');
+      par.className = 'card-par';
+      par.textContent = `P${hole.par}`;
+
+      const input = document.createElement('input');
+      input.type = 'number';
+      input.id = `hole-${hole.no}`;
+      input.className = 'card-input';
+      input.inputMode = 'numeric';
+      input.min = '1';
+      input.max = String(MAX_STROKES_PER_HOLE);
+      input.step = '1';
+      input.placeholder = '—';
+      input.setAttribute('aria-label', `${hole.no}番 パー${hole.par} の打数`);
+      if (hole.note) input.title = `${hole.no}番: ${hole.note}`;
+
+      input.addEventListener('input', () => {
+        updateScorecardTotal();
+        handleEvaluate();
+      });
+
+      holeInputs.push(input);
+      cell.append(no, par, input);
+      grid.append(cell);
+    }
+
+    group.append(grid);
+    els.scorecard.append(group);
+  }
+}
+
+function readHoleStrokes() {
+  return holeInputs.map((input) => {
+    const value = Number(input.value);
+    return input.value !== '' && Number.isFinite(value) && value > 0 ? Math.floor(value) : null;
+  });
+}
+
+function updateScorecardTotal() {
+  const values = readHoleStrokes().filter((v) => v !== null);
+  const total = values.reduce((sum, v) => sum + v, 0);
+  els.scorecardTotal.textContent =
+    values.length === 0
+      ? '各ホールの打数を入れると合計を出します。'
+      : values.length < 18
+        ? `${values.length}／18ホール入力　合計 ${total}打　— 18ホールそろうと評価します`
+        : `18／18ホール入力　合計 ${total}打`;
+}
+
 /* ------------------------------------------------------------------ */
 /* 評価の表示                                                          */
 /* ------------------------------------------------------------------ */
 
+function pastDifferentials() {
+  return loadRecords()
+    .map((r) => (Number.isFinite(r.differential) ? r.differential : scoreDifferential(r.strokes, findTee(r.teeId))))
+    .filter((d) => Number.isFinite(d));
+}
+
 function readForm() {
   return {
-    divisionId: els.division.value,
-    distanceKm: Number(els.distance.value),
-    timeInput: els.time.value,
-    conditionId: els.condition.value,
-    place: els.place.value ? Number(els.place.value) : null,
-    finishers: els.finishers.value ? Number(els.finishers.value) : null,
+    teeId: els.tee.value,
+    strokes: holeMode ? null : els.strokes.value,
+    holeStrokes: holeMode ? readHoleStrokes() : [],
+    putts: els.putts.value === '' ? null : Number(els.putts.value),
+    greens: els.greens.value === '' ? null : Number(els.greens.value),
+    pastDifferentials: pastDifferentials(),
   };
 }
 
@@ -161,47 +242,49 @@ function statTile(term, value, unit, sub) {
   return wrap;
 }
 
+function strong(text) {
+  const el = document.createElement('strong');
+  el.textContent = text;
+  return el;
+}
+
 function renderResult(result) {
   lastResult = result;
 
   els.rankChip.dataset.rank = result.grade.rank;
   els.rankChip.textContent = result.grade.rank;
-  els.scoreValue.textContent = result.score.toFixed(1);
+  els.scoreValue.textContent = result.points.toFixed(1);
   els.rankLabel.textContent = `評価 ${result.grade.rank} — ${result.grade.label}`;
   els.verdictMeta.textContent =
-    `${result.division.label} ／ ${formatDistance(result.distanceKm)}km ／ ${formatTime(result.seconds)}`;
+    `${result.strokes}打（パー${result.par} ${formatDiff(result.diff)}）／ ${result.tee.label}ティー ${result.tee.yards.toLocaleString()}yd`;
 
   els.meterFill.dataset.rank = result.grade.rank;
-  els.meterFill.style.width = `${Math.max(1.5, result.score)}%`;
+  els.meterFill.style.width = `${Math.max(1.5, result.points)}%`;
   els.meterTrack.setAttribute(
     'aria-label',
-    `評価スコア 100点満点中 ${result.score.toFixed(1)}点、評価 ${result.grade.rank}`,
+    `評価スコア 100点満点中 ${result.points.toFixed(1)}点、評価 ${result.grade.rank}`,
   );
 
-  const topPct = result.estimatedTopPercent;
-  els.stats.replaceChildren(
-    statTile('あなたのペース', formatPace(result.paceSecPerKm).replace('/km', ''), '/km'),
-    statTile(
-      '部門の基準タイム',
-      formatTime(result.standardSeconds),
-      '',
-      `${formatPace(result.standardPaceSecPerKm)}・60点相当`,
-    ),
-    statTile('推定順位', `上位 ${topPct.toFixed(0)}`, '%', '同部門のタイム分布からの推定'),
-    result.placePercent !== null
-      ? statTile(
-          '実際の順位',
-          `${result.place} / ${result.finishers}`,
-          '位',
-          `上位 ${result.placePercent.toFixed(0)}%`,
-        )
-      : statTile(
-          '基準タイム差',
-          signedTime(result.seconds - result.standardSeconds),
-          '',
-          'マイナスなら基準より速い',
-        ),
-  );
+  const tiles = [
+    statTile('スコア', String(result.strokes), '打', `パー${result.par} ${formatDiff(result.diff)}`),
+    statTile('今日の指数', result.differential.toFixed(1), '', 'ディファレンシャル'),
+    result.handicapIndex !== null
+      ? statTile('推定ハンデ指数', result.handicapIndex.toFixed(1), '', `直近${result.roundsUsed}ラウンドから`)
+      : statTile('推定ハンデ指数', '—', '', `あと${Math.max(0, 3 - result.roundsUsed)}ラウンドで算出`),
+    statTile('推定順位', `上位 ${result.estimatedTopPercent.toFixed(0)}`, '%', 'アマチュアのスコア分布からの推定'),
+  ];
+
+  if (result.putts !== null) {
+    tiles.push(
+      statTile('パット', String(result.putts), '', `1ホール平均 ${result.puttsPerHole.toFixed(2)}`),
+      statTile('パット以外', String(result.shotsWithoutPutts), '打', 'ショット数'),
+    );
+  }
+  if (result.greens !== null) {
+    tiles.push(statTile('パーオン', `${result.greens} / 18`, '', `${result.greenRate.toFixed(0)}%`));
+  }
+
+  els.stats.replaceChildren(...tiles);
 
   els.notes.replaceChildren(
     ...result.notes.map((text) => {
@@ -211,78 +294,58 @@ function renderResult(result) {
     }),
   );
 
-  if (result.target.gainSeconds > 0.5) {
+  if (result.target.gain > 0) {
     els.target.hidden = false;
-    els.target.replaceChildren();
-    els.target.append(
+    els.target.replaceChildren(
       document.createTextNode('次の目標： '),
-      strong(formatTime(result.target.seconds)),
+      strong(`${result.target.strokes}打`),
+      document.createTextNode('。いまより '),
+      strong(`${result.target.gain}打`),
       document.createTextNode(
-        `（${formatPace(result.target.paceSecPerKm)}）。いまより `,
-      ),
-      strong(`${Math.round(result.target.gainSeconds)}秒`),
-      document.createTextNode(
-        ` 縮めると ${result.target.score.toFixed(0)}点・評価 ${result.target.grade.rank} に届きます。`,
+        ` 縮めると ${result.target.points.toFixed(0)}点・評価 ${result.target.grade.rank}（${result.target.grade.label}）に届きます。`,
       ),
     );
   } else {
     els.target.hidden = true;
   }
 
-  renderEquivalents(result);
+  renderBreakdown(result);
   renderHistory();
 }
 
-function strong(text) {
-  const el = document.createElement('strong');
-  el.textContent = text;
-  return el;
-}
+function renderBreakdown(result) {
+  const summary = result.holeSummary;
+  els.breakdownPanel.hidden = !summary;
+  if (!summary) return;
 
-function signedTime(diffSeconds) {
-  const sign = diffSeconds < 0 ? '−' : '+';
-  return `${sign}${formatTime(Math.abs(diffSeconds))}`;
-}
+  els.resultCounts.replaceChildren(
+    ...HOLE_RESULTS.map((r) =>
+      statTile(r.label, String(summary.counts[r.key]), 'H'),
+    ),
+    statTile(
+      'OUT / IN',
+      `${summary.out.strokes || '—'} / ${summary.in.strokes || '—'}`,
+      '',
+      `${formatDiff(summary.out.strokes - summary.out.par)} / ${formatDiff(summary.in.strokes - summary.in.par)}`,
+    ),
+  );
 
-function formatDistance(km) {
-  return Number.isInteger(km) ? String(km) : String(Number(km.toFixed(2)));
-}
-
-function renderEquivalents(result) {
-  els.equivBody.replaceChildren();
-  const rows = [
-    {
-      km: result.distanceKm,
-      seconds: result.seconds,
-      paceSecPerKm: result.paceSecPerKm,
-      current: true,
-    },
-    ...result.equivalents,
-  ].sort((a, b) => a.km - b.km);
-
-  for (const row of rows) {
+  els.byParBody.replaceChildren();
+  for (const group of summary.byPar) {
     const tr = document.createElement('tr');
-    if (row.current) tr.className = 'is-current';
-
-    const th = document.createElement('td');
-    th.textContent = `${formatDistance(row.km)} km${row.current ? '（今回）' : ''}`;
-
-    const time = document.createElement('td');
-    time.className = 'num';
-    time.textContent = formatTime(row.seconds);
-
-    const pace = document.createElement('td');
-    pace.className = 'num';
-    pace.textContent = formatPace(row.paceSecPerKm).replace('/km', '');
-
-    const std = document.createElement('td');
-    std.className = 'num';
-    std.textContent = formatTime(
-      standardTime(result.division, row.km, result.condition.factor),
-    );
-
-    tr.append(th, time, pace, std);
-    els.equivBody.append(tr);
+    const cells = [
+      [`パー${group.par}`, ''],
+      [group.holes ? `${group.holes}H` : '—', 'num'],
+      [group.average !== null ? group.average.toFixed(2) : '—', 'num'],
+      [group.overPar !== null ? formatDiff(Math.round(group.overPar * 100) / 100) : '—', 'num'],
+    ];
+    for (const [text, cls] of cells) {
+      const td = document.createElement('td');
+      if (cls) td.className = cls;
+      td.textContent = text;
+      tr.append(td);
+    }
+    els.byParBody.append(tr);
   }
 }
 
@@ -290,30 +353,30 @@ function renderEquivalents(result) {
 /* 履歴                                                                */
 /* ------------------------------------------------------------------ */
 
-function currentRecords() {
+function currentRounds() {
   const saved = loadRecords();
-  return saved.length > 0 ? { records: saved, sample: false } : { records: SAMPLE_RECORDS, sample: true };
+  return saved.length > 0 ? { rounds: saved, sample: false } : { rounds: SAMPLE_ROUNDS, sample: true };
 }
 
 function renderHistory() {
-  const { records, sample } = currentRecords();
+  const { rounds, sample } = currentRounds();
   els.sampleNote.hidden = !sample;
   els.clearHistory.disabled = sample;
 
   els.historyBody.replaceChildren();
-  const byDateDesc = [...records].sort((a, b) => (a.date < b.date ? 1 : -1));
+  const newestFirst = [...rounds].sort((a, b) => (a.date < b.date ? 1 : -1));
 
-  for (const r of byDateDesc) {
-    const division = findDivision(r.divisionId);
+  for (const r of newestFirst) {
+    const tee = findTee(r.teeId);
     const tr = document.createElement('tr');
 
     const cells = [
       [r.date || '—', ''],
-      [division ? division.label : r.divisionId, ''],
-      [`${formatDistance(r.distanceKm)} km`, 'num'],
-      [formatTime(r.seconds), 'num'],
-      [formatPace(r.seconds / r.distanceKm).replace('/km', ''), 'num'],
-      [r.score.toFixed(1), 'num'],
+      [tee ? tee.label : r.teeId, ''],
+      [String(r.strokes), 'num'],
+      [formatDiff(r.diff ?? r.strokes - COURSE.par), 'num'],
+      [r.putts ? String(r.putts) : '—', 'num'],
+      [r.points.toFixed(1), 'num'],
     ];
     for (const [text, cls] of cells) {
       const td = document.createElement('td');
@@ -336,10 +399,10 @@ function renderHistory() {
       del.type = 'button';
       del.className = 'row-action';
       del.textContent = '削除';
-      del.setAttribute('aria-label', `${r.date} の記録を削除`);
+      del.setAttribute('aria-label', `${r.date} のラウンドを削除`);
       del.addEventListener('click', () => {
         removeRecord(r.id);
-        renderHistory();
+        handleEvaluate();
       });
       actionCell.append(del);
     }
@@ -348,7 +411,7 @@ function renderHistory() {
     els.historyBody.append(tr);
   }
 
-  renderChart([...records].sort((a, b) => (a.date < b.date ? -1 : 1)));
+  renderChart([...rounds].sort((a, b) => (a.date < b.date ? -1 : 1)));
 }
 
 /* ------------------------------------------------------------------ */
@@ -364,16 +427,16 @@ function svg(tag, attrs, text) {
   return el;
 }
 
-let chartRecords = [];
+let chartRounds = [];
 
-function renderChart(records) {
-  chartRecords = records;
+function renderChart(rounds) {
+  chartRounds = rounds;
   els.chartHolder.replaceChildren();
 
-  if (records.length === 0) {
+  if (rounds.length === 0) {
     const empty = document.createElement('p');
     empty.className = 'empty';
-    empty.textContent = '記録を保存すると、ここにスコアの推移が出ます。';
+    empty.textContent = 'ラウンドを保存すると、ここに評価スコアの推移が出ます。';
     els.chartHolder.append(empty);
     return;
   }
@@ -390,68 +453,41 @@ function renderChart(records) {
     height: H,
     viewBox: `0 0 ${W} ${H}`,
     role: 'img',
-    'aria-label': `評価スコアの推移。${records.length}件の記録。`,
+    'aria-label': `評価スコアの推移。${rounds.length}ラウンド。`,
   });
 
-  const x = (i) => (records.length === 1 ? pad.left + plotW / 2 : pad.left + (i / (records.length - 1)) * plotW);
-  const y = (score) => pad.top + plotH - (score / 100) * plotH;
+  const x = (i) => (rounds.length === 1 ? pad.left + plotW / 2 : pad.left + (i / (rounds.length - 1)) * plotW);
+  const y = (points) => pad.top + plotH - (points / 100) * plotH;
 
   for (const value of [0, 20, 40, 60, 80, 100]) {
-    root.append(
-      svg('line', { class: 'grid', x1: pad.left, x2: pad.left + plotW, y1: y(value), y2: y(value) }),
-    );
-    root.append(
-      svg('text', { class: 'tick', x: pad.left - 8, y: y(value) + 3.5, 'text-anchor': 'end' }, String(value)),
-    );
+    root.append(svg('line', { class: 'grid', x1: pad.left, x2: pad.left + plotW, y1: y(value), y2: y(value) }));
+    root.append(svg('text', { class: 'tick', x: pad.left - 8, y: y(value) + 3.5, 'text-anchor': 'end' }, String(value)));
   }
-  root.append(
-    svg('line', { class: 'axis', x1: pad.left, x2: pad.left + plotW, y1: y(0), y2: y(0) }),
-  );
+  root.append(svg('line', { class: 'axis', x1: pad.left, x2: pad.left + plotW, y1: y(0), y2: y(0) }));
 
-  if (records.length > 1) {
-    const d = records.map((r, i) => `${i === 0 ? 'M' : 'L'}${x(i).toFixed(1)},${y(r.score).toFixed(1)}`).join(' ');
+  if (rounds.length > 1) {
+    const d = rounds.map((r, i) => `${i === 0 ? 'M' : 'L'}${x(i).toFixed(1)},${y(r.points).toFixed(1)}`).join(' ');
     root.append(svg('path', { class: 'series', d }));
   }
 
-  records.forEach((r, i) => {
+  const bestPoints = Math.max(...rounds.map((r) => r.points));
+
+  rounds.forEach((r, i) => {
     const cx = x(i);
-    const cy = y(r.score);
+    const cy = y(r.points);
     root.append(svg('circle', { class: 'dot', cx, cy, r: 5 }));
 
     const hit = svg('circle', { class: 'dot-hit', cx, cy, r: 16 });
     hit.append(
-      svg(
-        'title',
-        {},
-        `${r.date}｜${formatTime(r.seconds)}（${formatDistance(r.distanceKm)}km）｜${r.score.toFixed(1)}点・評価${r.rank}`,
-      ),
+      svg('title', {}, `${r.date}｜${r.strokes}打｜${r.points.toFixed(1)}点・評価${r.rank}`),
     );
     root.append(hit);
 
-    const isEdge = i === 0 || i === records.length - 1;
-    const isBest = r.score === Math.max(...records.map((p) => p.score));
-    if (isEdge || isBest) {
-      root.append(
-        svg(
-          'text',
-          {
-            class: 'dot-label',
-            x: cx,
-            y: cy - 12,
-            'text-anchor': i === 0 ? 'start' : i === records.length - 1 ? 'end' : 'middle',
-          },
-          r.score.toFixed(0),
-        ),
-      );
+    const anchor = i === 0 ? 'start' : i === rounds.length - 1 ? 'end' : 'middle';
+    if (i === 0 || i === rounds.length - 1 || r.points === bestPoints) {
+      root.append(svg('text', { class: 'dot-label', x: cx, y: cy - 12, 'text-anchor': anchor }, String(r.strokes)));
     }
-
-    root.append(
-      svg(
-        'text',
-        { class: 'tick', x: cx, y: H - 12, 'text-anchor': i === 0 ? 'start' : i === records.length - 1 ? 'end' : 'middle' },
-        (r.date || '').slice(0, 7),
-      ),
-    );
+    root.append(svg('text', { class: 'tick', x: cx, y: H - 12, 'text-anchor': anchor }, (r.date || '').slice(0, 7)));
   });
 
   els.chartHolder.append(root);
@@ -461,8 +497,26 @@ function renderChart(records) {
 /* イベント                                                            */
 /* ------------------------------------------------------------------ */
 
+function setHoleMode(on) {
+  holeMode = on;
+  els.modeHoles.classList.toggle('is-on', on);
+  els.modeTotal.classList.toggle('is-on', !on);
+  els.modeHoles.setAttribute('aria-pressed', String(on));
+  els.modeTotal.setAttribute('aria-pressed', String(!on));
+  els.holesField.hidden = !on;
+  els.totalField.hidden = on;
+  handleEvaluate();
+}
+
 function handleEvaluate(event) {
   event?.preventDefault();
+
+  // ホール別入力の途中は、まだエラーではない。進捗はスコアカード側に出す。
+  if (holeMode && readHoleStrokes().some((v) => v === null)) {
+    showError('');
+    return null;
+  }
+
   const result = evaluate(readForm());
   if (!result.ok) {
     showError(result.error);
@@ -477,28 +531,26 @@ function handleSave() {
   const result = lastResult ?? handleEvaluate();
   if (!result || !result.ok) return;
 
-  const date = els.raceDate.value || new Date().toISOString().slice(0, 10);
   addRecord({
     id: makeId(),
-    date,
-    divisionId: result.division.id,
-    distanceKm: result.distanceKm,
-    seconds: result.seconds,
-    conditionId: result.condition.id,
-    score: result.score,
+    date: els.playDate.value || new Date().toISOString().slice(0, 10),
+    teeId: result.tee.id,
+    strokes: result.strokes,
+    diff: result.diff,
+    points: result.points,
     rank: result.grade.rank,
-    place: result.place,
-    finishers: result.finishers,
+    differential: Math.round(result.differential * 10) / 10,
+    putts: result.putts,
+    greens: result.greens,
+    holeStrokes: result.allHolesEntered ? readHoleStrokes() : null,
   });
-  renderHistory();
+  handleEvaluate();
 }
 
 function applyStoredTheme() {
   try {
-    const stored = window.localStorage.getItem('akatombo-xc:theme');
-    if (stored === 'dark' || stored === 'light') {
-      document.documentElement.dataset.theme = stored;
-    }
+    const stored = window.localStorage.getItem('akatombo-golf:theme');
+    if (stored === 'dark' || stored === 'light') document.documentElement.dataset.theme = stored;
   } catch {
     /* 保存が使えない環境ではOS設定に従います */
   }
@@ -512,7 +564,7 @@ function toggleTheme() {
   const next = isDark ? 'light' : 'dark';
   root.dataset.theme = next;
   try {
-    window.localStorage.setItem('akatombo-xc:theme', next);
+    window.localStorage.setItem('akatombo-golf:theme', next);
   } catch {
     /* 保存できなくても表示は切り替わります */
   }
@@ -520,28 +572,33 @@ function toggleTheme() {
 
 function init() {
   applyStoredTheme();
-  fillSelects();
+  fillCourseText();
   renderMeterTicks();
+  buildScorecard();
+  updateScorecardTotal();
 
-  els.distance.value = String(DEFAULT_DISTANCE_KM);
-  els.time.value = '10:24';
-  els.raceDate.value = new Date().toISOString().slice(0, 10);
+  els.strokes.value = '94';
+  els.putts.value = '33';
+  els.playDate.value = new Date().toISOString().slice(0, 10);
 
   els.form.addEventListener('submit', handleEvaluate);
-  for (const el of [els.division, els.distance, els.time, els.condition, els.place, els.finishers]) {
+  for (const el of [els.tee, els.strokes, els.putts, els.greens]) {
+    el.addEventListener('input', () => handleEvaluate());
     el.addEventListener('change', () => handleEvaluate());
   }
+  els.modeTotal.addEventListener('click', () => setHoleMode(false));
+  els.modeHoles.addEventListener('click', () => setHoleMode(true));
   els.saveButton.addEventListener('click', handleSave);
   els.clearHistory.addEventListener('click', () => {
     clearRecords();
-    renderHistory();
+    handleEvaluate();
   });
   els.themeToggle.addEventListener('click', toggleTheme);
 
   let resizeTimer = 0;
   window.addEventListener('resize', () => {
     window.clearTimeout(resizeTimer);
-    resizeTimer = window.setTimeout(() => renderChart(chartRecords), 150);
+    resizeTimer = window.setTimeout(() => renderChart(chartRounds), 150);
   });
 
   handleEvaluate();

@@ -1,9 +1,9 @@
 /**
- * 記録履歴の保存（ブラウザのローカル保存のみ。サーバーには何も送りません）
+ * ラウンド履歴の保存（ブラウザのローカル保存のみ。サーバーには何も送りません）
  */
 
-const STORAGE_KEY = 'akatombo-xc:records:v1';
-const MAX_RECORDS = 60;
+const STORAGE_KEY = 'akatombo-golf:rounds:v1';
+const MAX_RECORDS = 40;
 
 /** localStorage が使えない環境（プライベートウィンドウ等）のフォールバック。 */
 let memoryFallback = null;
@@ -32,21 +32,20 @@ function isRecord(value) {
     value &&
     typeof value === 'object' &&
     typeof value.id === 'string' &&
-    typeof value.divisionId === 'string' &&
-    Number.isFinite(value.distanceKm) &&
-    Number.isFinite(value.seconds) &&
-    Number.isFinite(value.score)
+    typeof value.teeId === 'string' &&
+    Number.isFinite(value.strokes) &&
+    Number.isFinite(value.points)
   );
 }
 
-/** 保存済みの記録を新しい順で返す。 */
+/** 保存済みのラウンドを新しい順で返す。 */
 export function loadRecords() {
   const records = readRaw();
   if (!Array.isArray(records)) return [];
   return records.filter(isRecord).sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
 }
 
-/** 記録を 1 件追加して、保存後の一覧を返す。 */
+/** ラウンドを 1 件追加して、保存後の一覧を返す。 */
 export function addRecord(record) {
   const next = [{ ...record, id: record.id ?? makeId() }, ...loadRecords()].slice(0, MAX_RECORDS);
   writeRaw(next);
