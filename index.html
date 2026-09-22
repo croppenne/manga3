@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>赤とんぼクロスカントリー 記録評価</title>
+<meta name="description" content="赤とんぼクロスカントリーのタイムを入力すると、部門別の基準タイムと比べて100点満点で評価します。">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=Zen+Old+Mincho:wght@600&display=swap">
+<link rel="stylesheet" href="assets/styles.css">
+</head>
+<body>
+<div class="wrap">
+
+  <header class="masthead">
+    <svg class="mark" viewBox="0 0 48 48" aria-hidden="true" fill="none">
+      <path d="M24 9v30" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/>
+      <path d="M24 16 5 11m19 5 19-5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+      <path d="M24 20 8 24m16-4 16 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+      <circle cx="24" cy="8" r="3.4" fill="currentColor"/>
+      <path d="M20 39h8" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/>
+    </svg>
+    <div>
+      <h1>赤とんぼクロスカントリー 記録評価</h1>
+      <p>部門と距離、完走タイムを入れると、部門の基準タイムと比べて100点満点で採点します。推定順位・目標タイム・他距離の換算まで一度に出ます。</p>
+    </div>
+    <button type="button" class="theme-toggle" id="themeToggle">配色を切り替え</button>
+  </header>
+
+  <div class="columns">
+
+    <!-- ===== 入力 ===== -->
+    <section class="panel" aria-labelledby="inputHeading">
+      <p class="eyebrow">入力</p>
+      <h2 id="inputHeading">レースの記録</h2>
+
+      <form id="scoreForm" class="stack" novalidate>
+        <label class="field" for="division">
+          <span>部門</span>
+          <select id="division" name="division"></select>
+        </label>
+
+        <div class="row">
+          <label class="field" for="distance">
+            <span>距離 <span class="hint">km</span></span>
+            <input id="distance" name="distance" type="number" inputmode="decimal" step="0.1" min="0.1" max="100" required>
+          </label>
+          <label class="field" for="time">
+            <span>完走タイム <span class="hint">分:秒</span></span>
+            <input id="time" name="time" type="text" inputmode="numeric" placeholder="12:34" autocomplete="off" required>
+          </label>
+        </div>
+
+        <label class="field" for="condition">
+          <span>コース状況</span>
+          <select id="condition" name="condition"></select>
+        </label>
+
+        <div class="row">
+          <label class="field" for="place">
+            <span>順位 <span class="hint">任意</span></span>
+            <input id="place" name="place" type="number" inputmode="numeric" step="1" min="1" placeholder="—">
+          </label>
+          <label class="field" for="finishers">
+            <span>完走者数 <span class="hint">任意</span></span>
+            <input id="finishers" name="finishers" type="number" inputmode="numeric" step="1" min="1" placeholder="—">
+          </label>
+        </div>
+
+        <label class="field" for="raceDate">
+          <span>開催日 <span class="hint">履歴の並び順に使います</span></span>
+          <input id="raceDate" name="raceDate" type="date">
+        </label>
+
+        <p class="error" id="formError" role="alert" hidden></p>
+
+        <div class="actions">
+          <button type="submit" class="primary">評価する</button>
+          <button type="button" class="ghost" id="saveButton">履歴に保存</button>
+        </div>
+      </form>
+    </section>
+
+    <!-- ===== 評価結果 ===== -->
+    <div>
+      <section class="panel" aria-labelledby="resultHeading" id="resultPanel">
+        <p class="eyebrow">評価</p>
+        <h2 id="resultHeading">この記録の評価</h2>
+
+        <div class="verdict">
+          <div class="rank-chip" id="rankChip" data-rank="C" aria-hidden="true">C</div>
+          <div class="verdict-text">
+            <div class="verdict-score"><span id="scoreValue">—</span><small>/ 100点</small></div>
+            <div class="verdict-label" id="rankLabel">部門と距離、タイムを入力してください</div>
+            <div class="verdict-meta" id="verdictMeta"></div>
+          </div>
+        </div>
+
+        <div class="meter">
+          <div class="meter-track" role="img" id="meterTrack" aria-label="評価スコア">
+            <div class="meter-fill" id="meterFill" data-rank="C" style="width:0%"></div>
+          </div>
+          <div class="meter-ticks" id="meterTicks"></div>
+        </div>
+
+        <dl class="stats" id="stats"></dl>
+
+        <ul class="notes" id="notes"></ul>
+
+        <p class="target" id="target" hidden></p>
+      </section>
+
+      <section class="panel" aria-labelledby="equivHeading">
+        <p class="eyebrow">距離換算</p>
+        <h2 id="equivHeading">同じ走力なら、他の距離は</h2>
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">距離</th>
+                <th scope="col" class="num">想定タイム</th>
+                <th scope="col" class="num">ペース</th>
+                <th scope="col" class="num">部門の基準</th>
+              </tr>
+            </thead>
+            <tbody id="equivBody"></tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <!-- ===== 履歴 ===== -->
+  <section class="panel" aria-labelledby="historyHeading">
+    <div class="chart-head">
+      <div>
+        <p class="eyebrow">履歴</p>
+        <h2 id="historyHeading" style="margin-bottom:0">スコアの推移<span class="sample-note" id="sampleNote" hidden>サンプル</span></h2>
+      </div>
+      <span class="legend">評価スコア</span>
+    </div>
+
+    <div id="chartHolder"></div>
+
+    <div class="table-scroll" style="margin-top:18px">
+      <table>
+        <thead>
+          <tr>
+            <th scope="col">開催日</th>
+            <th scope="col">部門</th>
+            <th scope="col" class="num">距離</th>
+            <th scope="col" class="num">タイム</th>
+            <th scope="col" class="num">ペース</th>
+            <th scope="col" class="num">スコア</th>
+            <th scope="col">評価</th>
+            <th scope="col"></th>
+          </tr>
+        </thead>
+        <tbody id="historyBody"></tbody>
+      </table>
+    </div>
+
+    <div class="actions" style="margin-top:16px">
+      <button type="button" class="ghost" id="clearHistory">履歴をすべて消す</button>
+    </div>
+  </section>
+
+  <footer class="colophon">
+    <p><strong>評価の根拠。</strong>部門ごとに「平均的な完走者の3kmタイム」を基準タイムとして持ち、Riegel 式（指数 1.06）で入力距離に換算します。基準タイムちょうどが60点・評価C、そこからの比率を折れ線で0〜100点に写します。推定順位は完走タイムが対数正規分布に従うという仮定による目安です。</p>
+    <p>基準タイムは一般的な市民クロスカントリーの完走タイムから置いた暫定値で、大会公式の記録ではありません。過去のリザルトが手元にあれば <code>src/criteria.js</code> の <code>base3k</code> を実データの平均に差し替えてください。全部門・全距離の評価がそのまま更新されます。</p>
+    <p>入力した記録はこの端末のブラウザにだけ保存されます。どこにも送信されません。</p>
+  </footer>
+
+</div>
+<script type="module" src="src/app.js"></script>
+</body>
+</html>

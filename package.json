@@ -1,0 +1,13 @@
+{
+  "name": "akatombo-xc-scoring",
+  "version": "1.0.0",
+  "private": true,
+  "description": "赤とんぼクロスカントリーの完走タイムを部門別に評価するウェブアプリ",
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/*.test.mjs",
+    "start": "python3 -m http.server 8000",
+    "build:artifact": "node tools/build-artifact.mjs"
+  },
+  "license": "MIT"
+}
