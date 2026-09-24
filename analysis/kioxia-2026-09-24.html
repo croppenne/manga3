@@ -1,0 +1,312 @@
+<title>キオクシア 連休明けチャート</title>
+<meta name="description" content="キオクシア(285A) 2026年9月の日足騰落、シルバーウィーク中の時間外(PTS・米サンディスク)の動き、9/24連休明けの気配と分析">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  --bg:#f6f7f9; --panel:#ffffff; --ink:#111418; --ink-2:#4a5059; --ink-3:#7a808a;
+  --rule:#e1e4e9; --grid:#eceef2; --neutral:#f0efec;
+  --kx:#2a78d6; --sd:#eb6834; --up:#d03b3b; --down:#2a78d6; --na:#c9cdd4;
+  --accent:#2a78d6;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --bg:#121417; --panel:#1a1c20; --ink:#f3f4f6; --ink-2:#c1c5cc; --ink-3:#8c929c;
+    --rule:#2c3036; --grid:#24272c; --neutral:#383835;
+    --kx:#3987e5; --sd:#d95926; --up:#e66767; --down:#3987e5; --na:#474c54;
+    --accent:#3987e5;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#121417; --panel:#1a1c20; --ink:#f3f4f6; --ink-2:#c1c5cc; --ink-3:#8c929c;
+  --rule:#2c3036; --grid:#24272c; --neutral:#383835;
+  --kx:#3987e5; --sd:#d95926; --up:#e66767; --down:#3987e5; --na:#474c54;
+  --accent:#3987e5;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:"Zen Kaku Gothic New","Hiragino Sans","Noto Sans JP",system-ui,sans-serif;font-size:15px;line-height:1.75;margin:0}
+.wrap{max-width:920px;margin:0 auto;padding-inline:16px;padding-block:28px 56px;display:flex;flex-direction:column;gap:28px}
+.mono,.num{font-family:"IBM Plex Mono",ui-monospace,Menlo,monospace;font-variant-numeric:tabular-nums}
+header .eyebrow{font-size:12px;letter-spacing:.08em;color:var(--ink-3)}
+h1{font-size:clamp(24px,4.4vw,34px);line-height:1.3;margin:4px 0 8px;text-wrap:balance;font-weight:700}
+h2{font-size:19px;margin:0 0 4px;text-wrap:balance}
+.lede{color:var(--ink-2);max-width:62ch;margin:0}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px}
+.kpi{background:var(--panel);border:1px solid var(--rule);border-radius:8px;padding:14px 16px;display:flex;flex-direction:column;gap:2px}
+.kpi .lab{font-size:12px;color:var(--ink-3);letter-spacing:.04em}
+.kpi .val{font-size:26px;font-weight:500}
+.kpi .sub{font-size:13px;color:var(--ink-2)}
+.pos{color:var(--up)} .neg{color:var(--down)}
+section.card{background:var(--panel);border:1px solid var(--rule);border-radius:8px;padding:20px 18px;display:flex;flex-direction:column;gap:12px}
+.note{font-size:13px;color:var(--ink-3);margin:0}
+.legend{display:flex;flex-wrap:wrap;gap:16px;font-size:13px;color:var(--ink-2)}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.sw{width:14px;height:3px;border-radius:2px;display:inline-block}
+.swb{width:10px;height:10px;border-radius:2px;display:inline-block}
+.chart{position:relative;width:100%}
+.chart svg{display:block;width:100%;height:auto;overflow:visible}
+.chart text{fill:var(--ink-2);font-size:11px;font-family:"IBM Plex Mono",ui-monospace,monospace}
+.tip{position:absolute;pointer-events:none;background:var(--panel);color:var(--ink);border:1px solid var(--rule);border-radius:6px;padding:8px 10px;font-size:12px;line-height:1.5;box-shadow:0 4px 14px rgba(0,0,0,.12);white-space:nowrap;z-index:2}
+.tbl{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:13px;min-width:520px}
+th,td{padding:7px 10px;border-bottom:1px solid var(--rule);text-align:left;vertical-align:top}
+th{color:var(--ink-3);font-weight:500;font-size:12px;letter-spacing:.04em}
+td.r,th.r{text-align:right}
+.analysis{display:flex;flex-direction:column;gap:18px}
+.analysis h3{font-size:16px;margin:0 0 2px}
+.analysis p{margin:0;max-width:66ch}
+.pill{display:inline-block;font-size:11px;padding:1px 8px;border-radius:999px;border:1px solid var(--rule);color:var(--ink-2);margin-left:6px;vertical-align:2px}
+ul.src{margin:0;padding-left:18px;font-size:13px;color:var(--ink-2)}
+ul.src a{color:var(--accent)}
+a:focus-visible,[tabindex]:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.caveat{border-left:3px solid var(--na);padding:4px 12px;font-size:13px;color:var(--ink-2)}
+</style>
+
+<div class="wrap">
+<header>
+  <div class="eyebrow mono">285A · 東証プライム · 2026年9月24日（木）時点</div>
+  <h1>キオクシア、5連休をまたいだ値動き</h1>
+  <p class="lede">9月18日（金）の大引けから、東証が休場した19〜23日のシルバーウィーク、そして連休明け24日の寄り付きまでを追いました。東証もPTSも休みの間は、共同でNAND工場を運営する米サンディスクの株価を「代わりの物差し」として並べています。</p>
+</header>
+
+<div class="kpis">
+  <div class="kpi"><span class="lab">9/18 終値（連休前）</span><span class="val num">54,570円</span><span class="sub num pos">+4,690円（+9.40%）高値引け</span></div>
+  <div class="kpi"><span class="lab">9/18 夜間PTS</span><span class="val num">55,998円</span><span class="sub num pos">終値比 +2.62%</span></div>
+  <div class="kpi"><span class="lab">9/24 寄り前 特別気配（9:03）</span><span class="val num">56,570円</span><span class="sub num pos">+2,000円（+3.7%）買い気配トップ</span></div>
+  <div class="kpi"><span class="lab">米サンディスク 9/17→9/23</span><span class="val num">+12.5%</span><span class="sub num">キオクシア 9/17→9/24気配 +13.4%</span></div>
+</div>
+
+<section class="card" aria-labelledby="h-holiday">
+  <div>
+    <h2 id="h-holiday">連休中の時間外の動き（9/18終値＝100）</h2>
+    <p class="note">東証は9/19〜23休場、PTSも祝日は取引なし。その間の米国市場（9/18〜23）はサンディスクの終値で代用しています。</p>
+  </div>
+  <div class="legend">
+    <span><i class="sw" style="background:var(--kx)"></i>キオクシア（東証終値・PTS・24日気配）</span>
+    <span><i class="sw" style="background:var(--sd)"></i>米サンディスク（SNDK 終値）</span>
+  </div>
+  <div class="chart" id="c1"></div>
+</section>
+
+<section class="card" aria-labelledby="h-daily">
+  <div>
+    <h2 id="h-daily">9月の日々の騰落率</h2>
+    <p class="note">終値ベースの前日比。24日は9:03時点の特別気配。灰色は数値を確認できなかった日です。</p>
+  </div>
+  <div class="legend">
+    <span><i class="swb" style="background:var(--up)"></i>上昇</span>
+    <span><i class="swb" style="background:var(--down)"></i>下落</span>
+    <span><i class="swb" style="background:var(--na)"></i>未確認</span>
+  </div>
+  <div class="chart" id="c2"></div>
+</section>
+
+<section class="card analysis" aria-labelledby="h-an">
+  <h2 id="h-an">値動きの分析</h2>
+
+  <div>
+    <h3>1. 連休前日の9/18は「先回り」の急騰<span class="pill">+9.40%</span></h3>
+    <p>米FOMC通過で米ハイテク・SOXが上がった流れに加え、日銀が0.25%利上げ（政策金利1.25%）を決めつつ反対が2人出たことが「ハト派的」と受け止められ、後場に上げ幅を広げて高値引けしました。連休前に売り物が薄くなり、持ち越し需要が一気に出た形です。</p>
+  </div>
+
+  <div>
+    <h3>2. 時間外はPTSで+2.6%、その後は米国任せ</h3>
+    <p>18日夜のPTSは55,998円と終値からさらに上へ。同じ夜、米国ではサンディスクがS&amp;P100採用思惑で+10.99%と急騰しており、キオクシアの材料を追認しました。21日は−1.41%と小休止、22日はRosenblatt証券の目標株価2,400ドル（買い）で+6.82%、23日はメモリー株の利益確定で−3.73%（SKハイニックス−3%、マイクロン−2%）。連休中の米国の値動きは「行って来い」で、18日終値比では+1.4%にとどまりました。</p>
+  </div>
+
+  <div>
+    <h3>3. 24日の気配は「サンディスクへの追いつき」でほぼ説明できる</h3>
+    <p>比較の起点を東証の17日終値（49,880円）とサンディスクの17日終値（約1,614ドル）にそろえると、キオクシアは24日の気配で+13.4%、サンディスクは23日終値で+12.5%。連休中に開いた差はすでに埋まっていて、寄り付きの+3.7%はPTS価格＋米国の小幅高をそのまま反映した水準です。気配時点の注文は買い約122.7万株・売り約114.7万株と差が小さく、上に大きく飛ぶほどの買いの偏りはありません。</p>
+  </div>
+
+  <div>
+    <h3>4. 注意点：最後に見えた米国の動きは下げ</h3>
+    <p>23日の米メモリー株は下落で終わっており、連休中の最新シグナルは弱めです。9月は±6〜9%の日が珍しくなく、11日−6.99%、14日−6.37%（アモデイ氏のAI開発減速発言、OpenAIのIPO延期報道で5万円割れ・75日線割れ）と連続安の後に、18日+9.40%で戻したばかり。寄り付き後は連休前からの含み益の利益確定が出やすく、高く始まって押し戻される「寄り天」の形にも注意が必要です。</p>
+  </div>
+
+  <div>
+    <h3>5. この先の節目</h3>
+    <p>上値の目安は7日に付けた59,200円（6万円手前）、下値は心理的な節目の5万円と、14日に割り込んだ75日移動平均線です。材料面では<strong>9月30日（米国時間）のマイクロン決算</strong>が最大のイベントで、HBM・NANDの価格見通しがキオクシアの方向を決めやすくなります。最高値（11万円台）から見るとまだ半値近辺で、値動きの大きさ自体がリスクです。</p>
+  </div>
+
+  <p class="caveat">この分析は公開ニュースから集めた数値にもとづく情報整理で、投資の推奨ではありません。24日の寄り付き後の値動き・終値は取得できていません。</p>
+</section>
+
+<section class="card" aria-labelledby="h-tbl">
+  <h2 id="h-tbl">データ一覧</h2>
+  <div class="tbl">
+  <table>
+    <thead><tr><th>日時（日本時間）</th><th>対象</th><th class="r">価格</th><th class="r">変化率</th><th>できごと</th></tr></thead>
+    <tbody id="tb"></tbody>
+  </table>
+  </div>
+</section>
+
+<section class="card" aria-labelledby="h-src">
+  <h2 id="h-src">出典</h2>
+  <ul class="src">
+    <li><a href="https://kabutan.jp/news/marketnews/?b=n202609240218">株探：話題株先取り【特別気配】速報 ＜買いトップ キオクシア＞（9/24 9:03）</a></li>
+    <li><a href="https://finance.yahoo.co.jp/quote/285A.T">Yahoo!ファイナンス：キオクシアHD（夜間PTS含む）</a></li>
+    <li><a href="https://limo.media/articles/-/139331">LIMO：半導体・AI関連株7選 9月18日の終値・騰落まとめ</a>（同シリーズ <a href="https://limo.media/articles/-/136732">9/1</a>・<a href="https://limo.media/articles/-/136876">9/2</a>・<a href="https://limo.media/articles/-/137060">9/3</a>・<a href="https://limo.media/articles/-/137154">9/4</a>・<a href="https://limo.media/articles/-/137455">9/7</a>・<a href="https://limo.media/articles/-/137750">9/9</a>・<a href="https://limo.media/articles/-/138206">9/11</a>・<a href="https://limo.media/articles/-/138513">9/14</a>・<a href="https://limo.media/articles/-/138697">9/15</a>・<a href="https://limo.media/articles/-/138885">9/16</a>）</li>
+    <li><a href="https://minkabu.jp/news/4620506">みんかぶ：キオクシアが後場上げ幅拡大、日銀利上げ「２人反対」（9/18）</a></li>
+    <li><a href="https://www.nikkei.com/article/DGXZQOFL0709M0X00C26A9000000/">日本経済新聞：キオクシア株価急伸 米サンディスクがS&amp;P100採用で急伸（9/7）</a></li>
+    <li><a href="https://kabutan.jp/news/marketnews/?b=n202609140257">株探：キオクシアが大幅続落し75日線割れ（9/14）</a></li>
+    <li><a href="https://www.ad-hoc-news.de/boerse/news/corporate-news/sandisk-stock-gains-on-s-and-p-100-debut-and-10-99-percent-rally/70143850">ad-hoc-news：SanDisk +10.99%（9/18）</a>・<a href="https://www.ad-hoc-news.de/boerse/news/corporate-news/sandisk-stock-heads-ahead-of-the-open-after-a-1-41-percent-drop/70152328">−1.41%（9/21）</a>・<a href="https://www.ad-hoc-news.de/boerse/news/corporate-news/sandisk-stock-gains-6-82-percent-as-rosenblatt-sets-a-2-400-target/70166155">+6.82%（9/22）</a></li>
+    <li><a href="https://247wallst.com/investing/2026/09/23/sk-hynix-falls-3-despite-wolfe-research-lifting-its-target-to-250-sandisk-drops-3-micron-slides-2/">24/7 Wall St.：SanDisk、Micron下落（9/23）</a></li>
+    <li><a href="https://www.investing.com/news/stock-market-news/micron-earnings-outlook-what-to-watch-ahead-of-the-september-30-report-93CH-4911385">Investing.com：マイクロン決算（9/30）の注目点</a></li>
+  </ul>
+</section>
+</div>
+
+<script>
+(function(){
+  const NS="http://www.w3.org/2000/svg";
+  const el=(t,a,p)=>{const e=document.createElementNS(NS,t);for(const k in a)e.setAttribute(k,a[k]);if(p)p.appendChild(e);return e};
+  const fmt=(v,d=2)=>(v>0?"+":"")+v.toFixed(d)+"%";
+
+  /* ---------- Chart 1: holiday window, indexed ---------- */
+  const slots=[
+    {k:"18c",l1:"9/18",l2:"15:30 終値"},
+    {k:"18p",l1:"9/18",l2:"夜間PTS"},
+    {k:"19", l1:"9/19",l2:"米 9/18終値"},
+    {k:"22", l1:"9/22",l2:"米 9/21終値"},
+    {k:"23", l1:"9/23",l2:"米 9/22終値"},
+    {k:"24a",l1:"9/24",l2:"米 9/23終値"},
+    {k:"24", l1:"9/24",l2:"9:03 気配"}
+  ];
+  const KX_BASE=54570, SD_BASE=1791.82;
+  const kx=[{i:0,p:54570,n:"東証 大引け（+9.40%、高値引け）"},{i:1,p:55998,n:"夜間PTS"},{i:6,p:56570,n:"連休明け 特別気配（+3.7%）"}]
+    .map(d=>({...d,v:d.p/KX_BASE*100}));
+  const sd=[{i:2,p:1791.82,n:"S&P100採用思惑 +10.99%"},{i:3,p:1766.64,n:"−1.41%"},{i:4,p:1887.04,n:"Rosenblatt 目標$2,400 +6.82%"},{i:5,p:1816.57,n:"メモリー株安 −3.73%"}]
+    .map(d=>({...d,v:d.p/SD_BASE*100}));
+
+  function chart1(){
+    const box=document.getElementById("c1"); box.innerHTML="";
+    const W=Math.max(340,box.clientWidth), H=W<520?300:320;
+    const m={t:18,r:34,b:52,l:44};
+    const svg=el("svg",{viewBox:`0 0 ${W} ${H}`,role:"img","aria-label":"9月18日終値を100とした、キオクシアと米サンディスクの連休中の推移"},box);
+    const iw=W-m.l-m.r, ih=H-m.t-m.b;
+    const y0=97,y1=106.5;
+    const X=i=>m.l+iw*(i/(slots.length-1));
+    const Y=v=>m.t+ih*(1-(v-y0)/(y1-y0));
+    // holiday band (TSE closed)
+    const bx0=X(1)+ (X(2)-X(1))*0.5, bx1=X(5)+(X(6)-X(5))*0.5;
+    el("rect",{x:bx0,y:m.t,width:bx1-bx0,height:ih,fill:"var(--neutral)"},svg);
+    const bt=el("text",{x:(bx0+bx1)/2,y:m.t+14,"text-anchor":"middle"},svg); bt.textContent="東証・PTS 休場（9/19〜23）";
+    for(let v=98;v<=106;v+=2){
+      el("line",{x1:m.l,x2:W-m.r,y1:Y(v),y2:Y(v),stroke:v===100?"var(--ink-3)":"var(--grid)","stroke-width":1,"stroke-dasharray":v===100?"3 3":""},svg);
+      const t=el("text",{x:m.l-8,y:Y(v)+4,"text-anchor":"end"},svg); t.textContent=v;
+    }
+    slots.forEach((s,i)=>{
+      const narrow=W<560;
+      const a=el("text",{x:X(i),y:H-m.b+18,"text-anchor":"middle"},svg); a.textContent=s.l1;
+      if(!narrow||i===0||i===1||i===6){const b=el("text",{x:X(i),y:H-m.b+33,"text-anchor":"middle","font-size":"10"},svg); b.textContent=s.l2;}
+    });
+    // lines
+    const path=(arr,col,dashFrom)=>{
+      for(let j=1;j<arr.length;j++){
+        const a=arr[j-1],b=arr[j];
+        el("line",{x1:X(a.i),y1:Y(a.v),x2:X(b.i),y2:Y(b.v),stroke:col,"stroke-width":2,"stroke-linecap":"round","stroke-dasharray":(dashFrom!=null&&j>=dashFrom)?"5 5":""},svg);
+      }
+    };
+    path(sd,"var(--sd)");
+    path(kx,"var(--kx)",2);
+    const dots=[];
+    const dot=(d,col,name,unit)=>{
+      const c=el("circle",{cx:X(d.i),cy:Y(d.v),r:5,fill:col,stroke:"var(--panel)","stroke-width":2},svg);
+      dots.push({x:X(d.i),y:Y(d.v),html:`<b>${name}</b> ${slots[d.i].l1} ${slots[d.i].l2}<br>${unit(d.p)}　指数 ${d.v.toFixed(1)}<br>${d.n}`});
+    };
+    sd.forEach(d=>dot(d,"var(--sd)","サンディスク",p=>"$"+p.toLocaleString("en-US",{minimumFractionDigits:2})));
+    kx.forEach(d=>dot(d,"var(--kx)","キオクシア",p=>p.toLocaleString("ja-JP")+"円"));
+    // direct labels at ends
+    const lk=kx[kx.length-1], ls=sd[sd.length-1];
+    const t1=el("text",{x:X(lk.i)-8,y:Y(lk.v)-12,"text-anchor":"end",style:"fill:var(--ink)"},svg); t1.textContent="キオクシア 103.7";
+    const t2=el("text",{x:X(ls.i),y:Y(ls.v)+20,"text-anchor":"middle",style:"fill:var(--ink)"},svg); t2.textContent="SNDK 101.4";
+    hover(box,svg,W,H,dots);
+  }
+
+  /* ---------- Chart 2: daily % change ---------- */
+  const days=[
+    ["9/1",2.02],["9/2",0],["9/3",1.31],["9/4",5.40],["9/7",9.31],["9/8",null],["9/9",-0.71],["9/10",null],
+    ["9/11",-6.99],["9/14",-6.37],["9/15",2.29],["9/16",-1.87],["9/17",null],["9/18",9.40],["9/24",3.7]
+  ];
+  const notes={"9/4":"米半導体株高","9/7":"米メモリー株急伸（SNDK +11.9%）","9/11":"米半導体株安・原油高","9/14":"AI開発減速懸念で5万円割れ・75日線割れ","9/15":"自律反発","9/16":"前日SOX反発も軟調","9/17":"終値49,880円（前日比は未確認）","9/18":"FOMC通過・日銀ハト派利上げ、高値引け","9/24":"9:03 特別気配（終値ではない）","9/8":"未確認","9/10":"未確認"};
+  function chart2(){
+    const box=document.getElementById("c2"); box.innerHTML="";
+    const W=Math.max(340,box.clientWidth), H=W<520?280:300;
+    const m={t:20,r:10,b:34,l:40};
+    const svg=el("svg",{viewBox:`0 0 ${W} ${H}`,role:"img","aria-label":"2026年9月のキオクシア日次騰落率"},box);
+    const iw=W-m.l-m.r, ih=H-m.t-m.b, y0=-10,y1=12;
+    const Y=v=>m.t+ih*(1-(v-y0)/(y1-y0));
+    for(let v=-10;v<=12;v+=5){ if(v>12)break;
+      el("line",{x1:m.l,x2:W-m.r,y1:Y(v),y2:Y(v),stroke:"var(--grid)","stroke-width":1},svg);
+      const t=el("text",{x:m.l-6,y:Y(v)+4,"text-anchor":"end"},svg); t.textContent=(v>0?"+":"")+v+"%";
+    }
+    el("line",{x1:m.l,x2:W-m.r,y1:Y(0),y2:Y(0),stroke:"var(--ink-3)","stroke-width":1},svg);
+    const n=days.length, step=iw/n, bw=Math.max(8,Math.min(30,step-6));
+    const marks=[];
+    // holiday gap marker between 9/18 and 9/24
+    const gx=m.l+step*(n-1);
+    el("line",{x1:gx,x2:gx,y1:m.t,y2:H-m.b,stroke:"var(--ink-3)","stroke-width":1,"stroke-dasharray":"2 4"},svg);
+    const gt=el("text",{x:gx+3,y:m.t+8,"font-size":"10"},svg); gt.textContent=W<520?"連休":"5連休";
+    days.forEach(([d,v],i)=>{
+      const cx=m.l+step*i+step/2, x=cx-bw/2;
+      if(v===null){
+        el("rect",{x,y:Y(0.9),width:bw,height:Y(-0.9)-Y(0.9),rx:2,fill:"var(--na)"},svg);
+      }else{
+        const top=v>=0?Y(v):Y(0), h=Math.max(1.5,Math.abs(Y(v)-Y(0)));
+        el("rect",{x,y:top,width:bw,height:h,rx:3,fill:v>0?"var(--up)":v<0?"var(--down)":"var(--ink-3)",opacity:d==="9/24"?0.55:1},svg);
+        if(Math.abs(v)>=5 || d==="9/24"){
+          const lt=el("text",{x:cx,y:v>=0?Y(v)-5:Y(v)+13,"text-anchor":"middle",style:"fill:var(--ink)","font-size":"10.5"},svg);
+          lt.textContent=(v>0?"+":"")+v.toFixed(1);
+        }
+      }
+      if(W>=520||i%2===0||d==="9/24"||d==="9/18"){const t=el("text",{x:cx,y:H-m.b+16,"text-anchor":"middle","font-size":"10"},svg); t.textContent=d;}
+      marks.push({x:cx,y:v===null?Y(0):Y(Math.max(v,0)),html:`<b>${d}</b>　${v===null?"データ未確認":fmt(v)}${notes[d]?"<br>"+notes[d]:""}`});
+    });
+    hover(box,svg,W,H,marks,step);
+  }
+
+  function hover(box,svg,W,H,pts,band){
+    const tip=document.createElement("div"); tip.className="tip"; tip.hidden=true; box.appendChild(tip);
+    const hit=el("rect",{x:0,y:0,width:W,height:H,fill:"transparent"},svg);
+    const move=(clientX)=>{
+      const r=svg.getBoundingClientRect(), sx=(clientX-r.left)*(W/r.width);
+      let best=null,bd=1e9; pts.forEach(p=>{const d=Math.abs(p.x-sx); if(d<bd){bd=d;best=p;}});
+      if(!best||bd>(band?band:60)) {tip.hidden=true;return;}
+      // gather all points at same x
+      const same=pts.filter(p=>Math.abs(p.x-best.x)<1);
+      tip.innerHTML=same.map(p=>p.html).join("<hr style='border:0;border-top:1px solid var(--rule);margin:6px 0'>");
+      tip.hidden=false;
+      const px=best.x*(r.width/W), py=Math.min(...same.map(p=>p.y))*(r.height/H);
+      const tw=tip.offsetWidth;
+      let left=px+12; if(left+tw>r.width) left=px-tw-12; if(left<0) left=0;
+      tip.style.left=left+"px"; tip.style.top=Math.max(0,py-10)+"px";
+    };
+    hit.addEventListener("pointermove",e=>move(e.clientX));
+    hit.addEventListener("pointerdown",e=>move(e.clientX));
+    hit.addEventListener("pointerleave",()=>tip.hidden=true);
+  }
+
+  /* ---------- table ---------- */
+  const rows=[
+    ["9/17 大引け","キオクシア","49,880円","—","FOMC通過"],
+    ["9/18 大引け","キオクシア","54,570円","+9.40%","日銀0.25%利上げ（反対2人）、高値引け"],
+    ["9/18 夜間","キオクシア PTS","55,998円","+2.62%","終値比"],
+    ["9/19 早朝","SNDK（9/18終値）","$1,791.82","+10.99%","S&P100採用思惑"],
+    ["9/19〜23","東証・PTS","—","—","休場（敬老の日・国民の休日・秋分の日）"],
+    ["9/22 早朝","SNDK（9/21終値）","$1,766.64","−1.41%","小反落"],
+    ["9/23 早朝","SNDK（9/22終値）","$1,887.04","+6.82%","Rosenblatt 買い・目標$2,400"],
+    ["9/24 早朝","SNDK（9/23終値）","$1,816.57","−3.73%","メモリー株安（時間外 $1,821.34）"],
+    ["9/24 9:03","キオクシア 気配","56,570円","+3.7%","特別買い気配トップ（買い122.7万株／売り114.7万株）"]
+  ];
+  const tb=document.getElementById("tb");
+  rows.forEach(r=>{const tr=document.createElement("tr");r.forEach((c,i)=>{const td=document.createElement("td");td.textContent=c;if(i===2||i===3){td.className="r num";}if(i===3&&c.startsWith("+"))td.classList.add("pos");if(i===3&&c.startsWith("−"))td.classList.add("neg");tr.appendChild(td);});tb.appendChild(tr);});
+
+  const draw=()=>{chart1();chart2();};
+  draw();
+  let t; window.addEventListener("resize",()=>{clearTimeout(t);t=setTimeout(draw,120);});
+})();
+</script>
